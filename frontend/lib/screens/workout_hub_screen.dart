@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import '../main.dart';
 import '../state/daily_tracker_state.dart';
 import 'diet_screen.dart';
 import 'trackers_screen.dart';
@@ -9,21 +12,16 @@ class WorkoutHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Workout & Health Hub'),
-      ),
+      appBar: AppBar(title: const Text('Workout & Health Hub')),
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          const Text(
-            "Select Hub Category",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
+          const Text("Select Hub Category", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 15),
           _buildHubCard(
             context,
             title: 'Strength Training',
-            subtitle: 'Select muscle groups, specific exercises, sets, reps & weight',
+            subtitle: 'Select muscle groups, expanded exercises, sets, reps & weight',
             icon: Icons.fitness_center,
             color: Colors.deepOrange,
             destination: const ScaffoldPageWrapper(
@@ -34,7 +32,7 @@ class WorkoutHubScreen extends StatelessWidget {
           _buildHubCard(
             context,
             title: 'Highest PR Records',
-            subtitle: 'View your personal best weights across all muscle groups',
+            subtitle: 'Input and view personal records across all muscle groups',
             icon: Icons.emoji_events,
             color: Colors.amber,
             destination: const ScaffoldPageWrapper(
@@ -45,7 +43,7 @@ class WorkoutHubScreen extends StatelessWidget {
           _buildHubCard(
             context,
             title: 'Diet & Meal Plan',
-            subtitle: 'View weekly diet recommendations and logged meals',
+            subtitle: 'Custom weekday diet planner and logged meals',
             icon: Icons.restaurant,
             color: Colors.green,
             destination: const ScaffoldPageWrapper(
@@ -55,8 +53,8 @@ class WorkoutHubScreen extends StatelessWidget {
           ),
           _buildHubCard(
             context,
-            title: 'Trackers (Nutrition & Activity)',
-            subtitle: 'Fetch nutrition values and sync mobile health app data',
+            title: 'Trackers (Nutrition & Sensors)',
+            subtitle: 'Gemini AI nutrition analysis & built-in motion sensor tracking',
             icon: Icons.track_changes,
             color: Colors.blue,
             destination: const ScaffoldPageWrapper(
@@ -67,18 +65,24 @@ class WorkoutHubScreen extends StatelessWidget {
           _buildHubCard(
             context,
             title: 'Warmup Routines',
-            subtitle: 'Dynamic stretches and injury prevention guides',
+            subtitle: 'Before and after workout warmups categorized by muscle group',
             icon: Icons.self_improvement,
             color: Colors.purple,
-            destination: const SimpleContentScreen(title: 'Warmup Routines'),
+            destination: const ScaffoldPageWrapper(
+              title: 'Warmup Routines',
+              child: WarmupRoutinesScreen(),
+            ),
           ),
           _buildHubCard(
             context,
-            title: 'Cardio Sessions',
-            subtitle: 'Running, walking, cycling endurance tracking',
+            title: 'AI Cardio Sessions',
+            subtitle: 'Treadmill, cycling & endurance tracking with Gemini AI calculations',
             icon: Icons.directions_run,
             color: Colors.teal,
-            destination: const SimpleContentScreen(title: 'Cardio Sessions'),
+            destination: const ScaffoldPageWrapper(
+              title: 'Cardio Sessions',
+              child: CardioSessionsScreen(),
+            ),
           ),
         ],
       ),
@@ -120,7 +124,6 @@ class WorkoutHubScreen extends StatelessWidget {
   }
 }
 
-// Wrapper to display modular screens inside clean sub-pages with an AppBar
 class ScaffoldPageWrapper extends StatelessWidget {
   final String title;
   final Widget child;
@@ -136,26 +139,8 @@ class ScaffoldPageWrapper extends StatelessWidget {
   }
 }
 
-class SimpleContentScreen extends StatelessWidget {
-  final String title;
-  const SimpleContentScreen({super.key, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Text(
-          'Content for $title coming soon!',
-          style: const TextStyle(fontSize: 16, color: Colors.grey),
-        ),
-      ),
-    );
-  }
-}
-
 // ==========================================
-// STRENGTH SECTION (PER-SET CUSTOMIZABLE LOGGING)
+// EXPANDED STRENGTH TRAINING SECTION
 // ==========================================
 class StrengthMuscleSelectorScreen extends StatefulWidget {
   const StrengthMuscleSelectorScreen({super.key});
@@ -166,13 +151,13 @@ class StrengthMuscleSelectorScreen extends StatefulWidget {
 
 class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScreen> {
   final Map<String, List<String>> muscleExerciseMap = {
-    'Chest': ['Incline Bench Press', 'Flat Dumbbell Press', 'Chest Flyes', 'Dips'],
-    'Back': ['Lat Pulldowns', 'Barbell Rows', 'Deadlifts', 'Face Pulls'],
-    'Shoulders': ['Overhead Shoulder Press', 'Lateral Raises', 'Front Raises'],
-    'Biceps': ['Barbell Curls', 'Hammer Curls', 'Preacher Curls'],
-    'Triceps': ['Triceps Rope Pushdowns', 'Skull Crushers', 'Overhead Extensions'],
-    'Legs': ['Barbell Squats', 'Leg Press', 'Romanian Deadlifts', 'Calf Raises'],
-    'Abs': ['Cable Crunches', 'Hanging Leg Raises', 'Plank Holds'],
+    'Chest': ['Incline Barbell Bench Press', 'Flat Dumbbell Press', 'Chest Flyes', 'Dips', 'Cable Crossover', 'Decline Press'],
+    'Back': ['Lat Pulldowns', 'Barbell Bent-Over Rows', 'Deadlifts', 'Face Pulls', 'Single-Arm Dumbbell Rows', 'T-Bar Rows'],
+    'Shoulders': ['Overhead Shoulder Press', 'Lateral Raises', 'Front Raises', 'Rear Delt Flyes', 'Arnold Press', 'Shrugs'],
+    'Biceps': ['Barbell Curls', 'Hammer Curls', 'Preacher Curls', 'Incline Dumbbell Curls', 'Concentration Curls'],
+    'Triceps': ['Triceps Rope Pushdowns', 'Skull Crushers', 'Overhead Extensions', 'Close-Grip Bench Press', 'Dips'],
+    'Legs': ['Barbell Squats', 'Leg Press', 'Romanian Deadlifts', 'Leg Extensions', 'Hamstring Curls', 'Calf Raises'],
+    'Abs': ['Cable Crunches', 'Hanging Leg Raises', 'Plank Holds', 'Russian Twists', 'Ab Wheel Rollouts'],
   };
 
   String? selectedMuscle;
@@ -317,7 +302,6 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
                           IconButton(
                             icon: Icon(Icons.flash_on, color: setItem.isSpecialSet ? Colors.amber : Colors.grey),
                             onPressed: () => setState(() => setItem.isSpecialSet = !setItem.isSpecialSet),
-                            tooltip: 'Toggle Drop/Super Set',
                           ),
                           IconButton(
                             icon: const Icon(Icons.remove_circle, color: Colors.redAccent),
@@ -331,17 +315,11 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
               ),
               const SizedBox(height: 10),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.deepOrange)),
-                      onPressed: _addSet,
-                      icon: const Icon(Icons.add, color: Colors.deepOrange),
-                      label: const Text("Add Another Set", style: TextStyle(color: Colors.deepOrange)),
-                    ),
-                  ),
-                ],
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.deepOrange), minimumSize: const Size.fromHeight(42)),
+                onPressed: _addSet,
+                icon: const Icon(Icons.add, color: Colors.deepOrange),
+                label: const Text("Add Another Set", style: TextStyle(color: Colors.deepOrange)),
               ),
               const SizedBox(height: 15),
 
@@ -360,10 +338,45 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
 }
 
 // ==========================================
-// HIGHEST PR RECORDS MENU
+// HIGHEST PR RECORDS (USER INPUT ENABLED)
 // ==========================================
-class PersonalRecordsScreen extends StatelessWidget {
+class PersonalRecordsScreen extends StatefulWidget {
   const PersonalRecordsScreen({super.key});
+
+  @override
+  State<PersonalRecordsScreen> createState() => _PersonalRecordsScreenState();
+}
+
+class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
+  final TextEditingController _weightController = TextEditingController();
+  String _selectedMuscle = 'Chest';
+  String _selectedExercise = 'Bench Press';
+
+  final Map<String, List<String>> _exercises = {
+    'Chest': ['Bench Press', 'Incline Dumbbell Press', 'Dips'],
+    'Back': ['Deadlift', 'Barbell Row', 'Lat Pulldown'],
+    'Legs': ['Barbell Squat', 'Leg Press', 'Romanian Deadlift'],
+    'Shoulders': ['Overhead Press', 'Lateral Raise'],
+    'Biceps': ['Barbell Curl', 'Preacher Curl'],
+    'Triceps': ['Skull Crushers', 'Rope Pushdown'],
+  };
+
+  @override
+  void dispose() {
+    _weightController.dispose();
+    super.dispose();
+  }
+
+  void _inputPR() {
+    final weight = double.tryParse(_weightController.text.trim());
+    if (weight != null && weight > 0) {
+      dailyTracker.updateOrAddPR(_selectedMuscle, _selectedExercise, weight);
+      _weightController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Updated PR for $_selectedExercise to $weight kg!')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -376,19 +389,78 @@ class PersonalRecordsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("Highest PR Records per Muscle Group", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text("Input / Update Personal Record (PR)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+
+              Card(
+                color: const Color(0xFF1E1E1E),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _selectedMuscle,
+                              decoration: const InputDecoration(labelText: 'Muscle', border: OutlineInputBorder()),
+                              items: _exercises.keys.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _selectedMuscle = val;
+                                    _selectedExercise = _exercises[val]!.first;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _selectedExercise,
+                              decoration: const InputDecoration(labelText: 'Exercise', border: OutlineInputBorder()),
+                              items: (_exercises[_selectedMuscle] ?? []).map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                              onChanged: (val) {
+                                if (val != null) setState(() => _selectedExercise = val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _weightController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Highest Weight Lifted (kg)', border: OutlineInputBorder()),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, minimumSize: const Size.fromHeight(45)),
+                        onPressed: _inputPR,
+                        icon: const Icon(Icons.emoji_events, color: Colors.black),
+                        label: const Text('Save Personal Record', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 25),
+
+              const Text("Highest PR Records Stored", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
 
               prs.isEmpty
                   ? const Card(
                       child: Padding(
                         padding: EdgeInsets.all(20.0),
-                        child: Center(child: Text("No PR records stored yet. Log heavier weights in Strength workouts!")),
+                        child: Center(child: Text("No PR records stored yet.")),
                       ),
                     )
                   : Column(
                       children: prs.entries.map((muscleEntry) {
                         return Card(
+                          color: const Color(0xFF1E1E1E),
                           margin: const EdgeInsets.symmetric(vertical: 6),
                           child: ExpansionTile(
                             leading: const Icon(Icons.emoji_events, color: Colors.amber),
@@ -407,6 +479,316 @@ class PersonalRecordsScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ==========================================
+// WARMUP ROUTINES (BY MUSCLE GROUP)
+// ==========================================
+class WarmupRoutinesScreen extends StatefulWidget {
+  const WarmupRoutinesScreen({super.key});
+
+  @override
+  State<WarmupRoutinesScreen> createState() => _WarmupRoutinesScreenState();
+}
+
+class _WarmupRoutinesScreenState extends State<WarmupRoutinesScreen> {
+  String _selectedMuscle = 'Chest & Shoulders';
+
+  final Map<String, Map<String, List<String>>> _warmupData = {
+    'Chest & Shoulders': {
+      'Before Workout (Dynamic Warmup)': [
+        'Arm Circles (15 forward, 15 backward)',
+        'Band Dislocates (12 reps)',
+        'Dynamic Chest Hugs (15 reps)',
+        'Light Cable Face Pulls (15 reps)'
+      ],
+      'After Workout (Static Stretching)': [
+        'Doorway Chest Stretch (30s hold per side)',
+        'Cross-Body Shoulder Stretch (30s hold)',
+        'Overhead Triceps Stretch (30s hold)'
+      ],
+    },
+    'Back & Core': {
+      'Before Workout (Dynamic Warmup)': [
+        'Cat-Cow Stretch (12 reps)',
+        'Thoracic Spine Rotations (10 reps/side)',
+        'Bodyweight Good Mornings (15 reps)',
+        'Inverted Bodyweight Rows (10 reps)'
+      ],
+      'After Workout (Static Stretching)': [
+        'Child\'s Pose Stretch (45s hold)',
+        'Cobra Pose Stretch (30s hold)',
+        'Hanging Lat Stretch (30s hold)'
+      ],
+    },
+    'Legs & Hips': {
+      'Before Workout (Dynamic Warmup)': [
+        'Leg Swings (15 forward/backward & lateral)',
+        'Bodyweight Squats (15 reps)',
+        'Walking Hip Openers / World\'s Greatest Stretch (10 reps)',
+        'Bodyweight Glute Bridges (15 reps)'
+      ],
+      'After Workout (Static Stretching)': [
+        'Standing Quadriceps Stretch (30s/leg)',
+        'Seated Hamstring Stretch (40s hold)',
+        'Pigeon Pose Hip Opener (30s/side)'
+      ],
+    },
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final routines = _warmupData[_selectedMuscle] ?? {};
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Select Target Muscle Group", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+
+          Wrap(
+            spacing: 8.0,
+            children: _warmupData.keys.map((group) {
+              final isSelected = _selectedMuscle == group;
+              return ChoiceChip(
+                label: Text(group),
+                selected: isSelected,
+                selectedColor: Colors.deepOrange,
+                onSelected: (val) {
+                  if (val) setState(() => _selectedMuscle = group);
+                },
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 20),
+
+          // BEFORE WORKOUT CARD
+          Card(
+            color: const Color(0xFF1E1E1E),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.play_circle_fill, color: Colors.amber),
+                      SizedBox(width: 8),
+                      Text("Before Workout Warmup", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.amber)),
+                    ],
+                  ),
+                  const Divider(),
+                  ...(routines['Before Workout (Dynamic Warmup)'] ?? []).map((ex) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle_outline, size: 16, color: Colors.deepOrange),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(ex)),
+                          ],
+                        ),
+                      )),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 15),
+
+          // AFTER WORKOUT CARD
+          Card(
+            color: const Color(0xFF1E1E1E),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.stop_circle, color: Colors.teal),
+                      SizedBox(width: 8),
+                      Text("After Workout Cooldowns", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+                    ],
+                  ),
+                  const Divider(),
+                  ...(routines['After Workout (Static Stretching)'] ?? []).map((ex) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle_outline, size: 16, color: Colors.teal),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(ex)),
+                          ],
+                        ),
+                      )),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// CARDIO SESSIONS (AI-POWERED)
+// ==========================================
+class CardioSessionsScreen extends StatefulWidget {
+  const CardioSessionsScreen({super.key});
+
+  @override
+  State<CardioSessionsScreen> createState() => _CardioSessionsScreenState();
+}
+
+class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
+  String _cardioType = 'Treadmill Running';
+  final TextEditingController _durationController = TextEditingController();
+  final TextEditingController _speedController = TextEditingController();
+  final TextEditingController _inclineController = TextEditingController();
+
+  bool _isCalculating = false;
+
+  @override
+  void dispose() {
+    _durationController.dispose();
+    _speedController.dispose();
+    _inclineController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _calculateAndLogCardio() async {
+    final duration = int.tryParse(_durationController.text.trim()) ?? 0;
+    final speed = double.tryParse(_speedController.text.trim()) ?? 0.0;
+    final incline = double.tryParse(_inclineController.text.trim()) ?? 0.0;
+
+    if (duration <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid duration!')));
+      return;
+    }
+
+    setState(() => _isCalculating = true);
+
+    try {
+      final prompt = "Calculate calories burned for $_cardioType session: duration $duration mins, speed $speed km/h, incline $incline%. Return JSON strictly in format: {\"calories\": 0, \"distance_km\": 0.0}";
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/ai/chat'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'prompt': prompt}),
+      ).timeout(const Duration(seconds: 25));
+
+      int cals = (duration * 8.5).toInt();
+      double dist = (speed * (duration / 60.0));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        String rawText = data['response'] ?? '';
+        rawText = rawText.replaceAll("```json", "").replaceAll("```", "").trim();
+        try {
+          final jsonResult = jsonDecode(rawText);
+          cals = jsonResult['calories'] ?? cals;
+          dist = (jsonResult['distance_km'] as num).toDouble();
+        } catch (_) {}
+      }
+
+      dailyTracker.logCardioSession(_cardioType, duration, dist, cals);
+
+      // FIX: Guard BuildContext across async gap
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logged $_cardioType: $cals kcal burned ($dist km)!')),
+      );
+
+      _durationController.clear();
+      _speedController.clear();
+      _inclineController.clear();
+    } catch (_) {
+      int fallbackCals = (duration * 8).toInt();
+      double fallbackDist = (speed * (duration / 60.0));
+      dailyTracker.logCardioSession(_cardioType, duration, fallbackDist, fallbackCals);
+
+      // FIX: Guard BuildContext across async gap
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logged $_cardioType (Offline estimate): $fallbackCals kcal!')),
+      );
+    } finally {
+      if (mounted) setState(() => _isCalculating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("AI-Powered Cardio Endurance Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+
+          Card(
+            color: const Color(0xFF1E1E1E),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: _cardioType,
+                    decoration: const InputDecoration(labelText: 'Cardio Mode', border: OutlineInputBorder()),
+                    items: ['Treadmill Running', 'Outdoor Cycling', 'Rowing Machine', 'Elliptical Trainer', 'Stair Master']
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => _cardioType = val);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _durationController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Duration (Minutes)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _speedController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Avg Speed (km/h)', border: OutlineInputBorder()),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _inclineController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Incline Level / Resistance', border: OutlineInputBorder()),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, minimumSize: const Size.fromHeight(45)),
+                    onPressed: _isCalculating ? null : _calculateAndLogCardio,
+                    child: _isCalculating
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Calculate Calories & Log Session', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

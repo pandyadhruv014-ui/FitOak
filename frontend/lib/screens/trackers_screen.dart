@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:sensors_plus/sensors_plus.dart';
 import '../main.dart';
 import '../state/daily_tracker_state.dart';
 
@@ -14,8 +16,52 @@ class TrackersTabScreen extends StatefulWidget {
 class _TrackersTabScreenState extends State<TrackersTabScreen> {
   final TextEditingController _foodController = TextEditingController();
   bool _isFetching = false;
-
   Map<String, dynamic>? _fetchedNutrition;
+
+  // Hardware Accelerometer Motion Sensor Tracking Variables
+  StreamSubscription<UserAccelerometerEvent>? _accelSubscription;
+  bool _isSensorActive = false;
+  double _lastAccel = 0.0;
+  int _sensorSteps = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    dailyTracker.addListener(_onStateChange);
+    _startMotionSensor();
+  }
+
+  @override
+  void dispose() {
+    _accelSubscription?.cancel();
+    dailyTracker.removeListener(_onStateChange);
+    _foodController.dispose();
+    super.dispose();
+  }
+
+  void _onStateChange() {
+    if (mounted) setState(() {});
+  }
+
+  void _startMotionSensor() {
+    _accelSubscription = userAccelerometerEventStream().listen((event) {
+      double acceleration = (event.x * event.x + event.y * event.y + event.z * event.z);
+      if (acceleration > 12.0 && (_lastAccel <= 12.0)) {
+        _sensorSteps++;
+        if (_sensorSteps % 5 == 0) {
+          dailyTracker.syncDeviceHealthData(
+            steps: 5,
+            distance: 0.0038,
+            burnedCals: 1,
+          );
+        }
+      }
+      _lastAccel = acceleration;
+      if (!_isSensorActive && mounted) {
+        setState(() => _isSensorActive = true);
+      }
+    });
+  }
 
   Future<void> _fetchNutritionalValues() async {
     final query = _foodController.text.trim();
@@ -28,20 +74,22 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/nutrition/parse'),
+        Uri.parse('$baseUrl/api/ai/nutrition'),
         headers: const {'Content-Type': 'application/json'},
-        body: jsonEncode({'food_query': query}),
-      );
+        body: jsonEncode({'meal_description': query}),
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        final nutrition = data['data'];
         setState(() {
           _fetchedNutrition = {
-            'name': query,
-            'calories': data['calories'] ?? 250,
-            'protein': data['protein'] ?? 20,
-            'carbs': data['carbs'] ?? 30,
-            'fat': data['fat'] ?? 8,
+            'name': nutrition['meal_name'] ?? query,
+            'calories': (nutrition['calories'] as num).toInt(),
+            'protein': (nutrition['protein_g'] as num).toInt(),
+            'carbs': (nutrition['carbs_g'] as num).toInt(),
+            'fat': (nutrition['fat_g'] as num).toInt(),
+            'tips': nutrition['tips'] ?? '',
           };
         });
       } else {
@@ -62,6 +110,7 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
         'protein': 24,
         'carbs': 35,
         'fat': 10,
+        'tips': 'Balanced protein and carb estimation.',
       };
     });
   }
@@ -69,12 +118,14 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
   void _addMealToTodayDiet() {
     if (_fetchedNutrition == null) return;
 
-    dailyTracker.addFoodItem(
-      _fetchedNutrition!['name'],
-      _fetchedNutrition!['calories'],
-      _fetchedNutrition!['protein'],
-      _fetchedNutrition!['carbs'],
-      _fetchedNutrition!['fat'],
+    dailyTracker.logUserMeal(
+      day: 'Monday',
+      mealCategory: 'Snacks',
+      foodName: _fetchedNutrition!['name'],
+      calories: _fetchedNutrition!['calories'],
+      protein: _fetchedNutrition!['protein'],
+      carbs: _fetchedNutrition!['carbs'],
+      fat: _fetchedNutrition!['fat'],
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -87,51 +138,6 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
     });
   }
 
-  void _requestHealthSyncConsent() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          title: const Row(
-            children: [
-              Icon(Icons.health_and_safety, color: Colors.deepOrange),
-              SizedBox(width: 8),
-              Text("Sync Mobile Health App", style: TextStyle(fontSize: 18)),
-            ],
-          ),
-          content: const Text(
-            "FitOak requests permission to access step count, active walk/run distance, and calories burned from your device's built-in Health Sensor.\n\n"
-            "This ensures 100% accurate activity tracking without requiring manual logging.",
-            style: TextStyle(fontSize: 14),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text("Decline", style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange),
-              onPressed: () {
-                Navigator.pop(ctx);
-                dailyTracker.syncDeviceHealthData(
-                  steps: 6420,
-                  distance: 4.8,
-                  burnedCals: 310,
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Successfully synced with Mobile Health App!")),
-                );
-              },
-              child: const Text("Agree & Grant Access", style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -139,35 +145,42 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Daily Activity Tracker (Inbuilt Health)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text("Live Motion & Activity Tracker (Built-in Sensor)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Card(
             color: const Color(0xFF1E1E1E),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("Sync Walking, Running & Active Motion", style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  const Text("Fetches accurate activity metrics directly from your phone's built-in sensors.", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  const SizedBox(height: 15),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, minimumSize: const Size.fromHeight(45)),
-                    onPressed: _requestHealthSyncConsent,
-                    icon: const Icon(Icons.sync, color: Colors.white),
-                    label: Text(
-                      dailyTracker.isHealthPermissionGranted ? "Re-sync Mobile Health Data" : "Grant Consent & Sync Health App",
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  )
+                  Row(
+                    children: [
+                      Icon(Icons.sensors, color: _isSensorActive ? Colors.greenAccent : Colors.grey),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _isSensorActive ? "Built-in Motion Sensor: Active" : "Initializing Hardware Sensors...",
+                          style: TextStyle(fontWeight: FontWeight.bold, color: _isSensorActive ? Colors.greenAccent : Colors.grey),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _sensorMetric("Sensor Steps", "${dailyTracker.dailySteps}"),
+                      _sensorMetric("Active Distance", "${dailyTracker.distanceKm.toStringAsFixed(2)} km"),
+                      _sensorMetric("Burned", "${dailyTracker.totalCaloriesBurned} kcal"),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 25),
 
-          const Text("Nutritional Value Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text("AI Nutritional Value Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Card(
             color: const Color(0xFF1E1E1E),
@@ -178,9 +191,9 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                   TextField(
                     controller: _foodController,
                     decoration: const InputDecoration(
-                      labelText: 'Enter Food or Meal (e.g., 2 eggs & toast)',
+                      labelText: 'Enter Meal (e.g., 2 eggs & brown toast)',
                       border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.search),
+                      suffixIcon: Icon(Icons.restaurant),
                     ),
                   ),
                   const SizedBox(height: 15),
@@ -192,7 +205,7 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                     onPressed: _isFetching ? null : _fetchNutritionalValues,
                     child: _isFetching
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text('Fetch Accurate Nutritional Values', style: TextStyle(color: Colors.white)),
+                        : const Text('Analyze Nutrition with Gemini AI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                   if (_fetchedNutrition != null) ...[
                     const Divider(height: 30),
@@ -207,7 +220,11 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                         _macroBadge('Fat', '${_fetchedNutrition!['fat']}g'),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    if ((_fetchedNutrition!['tips'] ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text("Tip: ${_fetchedNutrition!['tips']}", style: const TextStyle(color: Colors.amber, fontSize: 12, fontStyle: FontStyle.italic)),
+                    ],
+                    const SizedBox(height: 15),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.green, minimumSize: const Size.fromHeight(45)),
                       onPressed: _addMealToTodayDiet,
@@ -221,22 +238,73 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
           ),
           const SizedBox(height: 25),
 
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.withAlpha(80), style: BorderStyle.solid),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Center(
-              child: Text(
-                "+ Space Reserved for Additional Trackers\n(Water Intake, Sleep Monitor, Body Weight)",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 13),
+          const Text("Hydration & Water Intake Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Card(
+            color: const Color(0xFF1E1E1E),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.local_drink, color: Colors.blue, size: 28),
+                          SizedBox(width: 10),
+                          Text("Daily Water Intake", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      Text(
+                        "${dailyTracker.waterGlasses} / ${dailyTracker.waterGoalGlasses} Glasses",
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  LinearProgressIndicator(
+                    value: (dailyTracker.waterGlasses / dailyTracker.waterGoalGlasses).clamp(0.0, 1.0),
+                    backgroundColor: Colors.grey.shade800,
+                    color: Colors.blue,
+                    minHeight: 10,
+                  ),
+                  const SizedBox(height: 15),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: dailyTracker.removeWaterGlass,
+                          icon: const Icon(Icons.remove, color: Colors.redAccent),
+                          label: const Text("-1 Glass", style: TextStyle(color: Colors.redAccent)),
+                        ),
+                      ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                          onPressed: dailyTracker.addWaterGlass,
+                          icon: const Icon(Icons.add, color: Colors.white),
+                          label: const Text("+1 Glass", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  )
+                ],
               ),
             ),
-          )
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _sensorMetric(String label, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      ],
     );
   }
 

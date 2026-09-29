@@ -1,4 +1,5 @@
 import os
+import json
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,15 +7,15 @@ from sqlalchemy import Column, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
-from openai import OpenAI
+from google import genai
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
 app = FastAPI(title="FitOak Backend")
 
-# --- CORS Setup (Essential for Mobile App Connections) ---
+# --- CORS Setup ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,11 +27,9 @@ app.add_middleware(
 # --- Database Setup (Neon PostgreSQL / Local SQLite Fallback) ---
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./fitoak.db")
 
-# Fix legacy database driver prefixes (e.g. postgres:// -> postgresql://)
 if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
     SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Configure SQLAlchemy engine based on database type
 if "sqlite" in SQLALCHEMY_DATABASE_URL:
     engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 else:
@@ -49,7 +48,6 @@ class UserDB(Base):
     gender = Column(String, default="")
     goal = Column(String, default="")
 
-# Creates tables in Neon PostgreSQL automatically upon startup
 Base.metadata.create_all(bind=engine)
 
 def get_db():
@@ -62,11 +60,9 @@ def get_db():
 # --- Security / Password Hashing ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# --- Groq AI Client Setup ---
-client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1"
-)
+# --- Gemini AI Client Setup ---
+gemini_api_key = os.getenv("GEMINI_API_KEY")
+gemini_client = genai.Client(api_key=gemini_api_key) if gemini_api_key else None
 
 # --- Pydantic Models ---
 class UserRegister(BaseModel):
@@ -81,8 +77,8 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
-class PromptRequest(BaseModel):
-    prompt: str
+class NutritionRequest(BaseModel):
+    meal_description: str
 
 
 # --- API ENDPOINTS ---
@@ -137,16 +133,39 @@ def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
         }
     }
 
-@app.post("/api/ai/chat")
-def get_groq_response(request: PromptRequest):
-    try:
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "user", "content": request.prompt}
-            ]
+# --- Gemini AI Nutrition Analyzer Endpoint ---
+@app.post("/api/ai/nutrition")
+def analyze_nutrition(request: NutritionRequest):
+    if not gemini_client:
+        raise HTTPException(
+            status_code=500, 
+            detail="GEMINI_API_KEY environment variable is not configured."
         )
-        answer = completion.choices[0].message.content
-        return {"response": answer}
+    
+    prompt = f"""
+    Analyze the following meal and calculate its nutritional breakdown: "{request.meal_description}".
+    Return ONLY a valid JSON object without markdown or formatting block, matching this structure:
+    {{
+      "meal_name": "Short summary name of meal",
+      "calories": 0,
+      "protein_g": 0.0,
+      "carbs_g": 0.0,
+      "fat_g": 0.0,
+      "health_score": "1-10 string rating",
+      "tips": "Brief actionable nutrition advice"
+    }}
+    """
+    
+    try:
+        response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        
+        # Clean response string and parse JSON
+        raw_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        nutrition_data = json.loads(raw_text)
+        
+        return {"status": "success", "data": nutrition_data}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Gemini AI processing failed: {str(e)}")
