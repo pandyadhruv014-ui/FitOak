@@ -1,5 +1,6 @@
 import os
 from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -12,6 +13,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI(title="FitOak Backend")
+
+# --- CORS Setup (Essential for Mobile App Connections) ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Database Setup (Neon PostgreSQL / Local SQLite Fallback) ---
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./fitoak.db")

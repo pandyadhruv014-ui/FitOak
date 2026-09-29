@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'screens/auth_screens.dart';
 import 'state/daily_tracker_state.dart';
 
-// OLD (Local Wi-Fi only):
-// const String baseUrl = "http://10.168.226.120:8000";
-
-// NEW (Global Cloud Backend):
+// Global Cloud Backend URL:
 const String baseUrl = "https://backend-um5a.onrender.com";
 
 void main() {
@@ -38,7 +36,6 @@ class FitOakApp extends StatelessWidget {
               backgroundColor: Color(0xFF1E1E1E),
             ),
           ),
-          // Starts with the 9:16 splash screen, then moves to AuthGateScreen
           home: const SplashScreen(nextScreen: AuthGateScreen()),
         );
       },
@@ -61,17 +58,12 @@ class _SplashScreenState extends State<SplashScreen> {
     _initializeApp();
   }
 
-  // Handles background data pre-fetching while keeping the splash visible
   Future<void> _initializeApp() async {
     await Future.wait([
-      // 1. Minimum display time for branding and smooth transition (2.5 seconds)
       Future.delayed(const Duration(milliseconds: 2500)),
-      
-      // 2. Preload your initial tokens, user profiles, or backend health checks here
       _fetchInitialData(),
     ]);
 
-    // Once finished, seamlessly switch to the main app flow
     if (mounted) {
       Navigator.pushReplacement(
         context,
@@ -82,10 +74,10 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _fetchInitialData() async {
     try {
-      // Optional: Add your initial backend startup checks here
-      // e.g., await http.get(Uri.parse('$baseUrl/'));
+      // Ping Render backend to wake up free tier instance
+      await http.get(Uri.parse('$baseUrl/')).timeout(const Duration(seconds: 15));
     } catch (e) {
-      debugPrint("Startup data fetch error: $e");
+      debugPrint("Backend ping error: $e");
     }
   }
 
@@ -95,7 +87,7 @@ class _SplashScreenState extends State<SplashScreen> {
       body: SizedBox.expand(
         child: Image.asset(
           'assets/splash_background.png',
-          fit: BoxFit.cover, // Automatically handles your 2286x4096 9:16 ratio edge-to-edge
+          fit: BoxFit.cover,
         ),
       ),
     );
