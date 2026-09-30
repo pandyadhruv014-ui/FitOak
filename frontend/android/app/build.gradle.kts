@@ -1,20 +1,17 @@
-import com.android.build.api.dsl.ApplicationExtension
-
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Modern AGP ApplicationExtension configuration block
-configure<ApplicationExtension> {
-    namespace = "com.example.fitoak" // Replace with your actual app package name if different
+android {
+    namespace = "com.example.fitoak" // Replace with your actual package name if different
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.fitoak" // Replace with your actual app package name
-        minSdk = 21
+        applicationId = "com.example.fitoak" // Replace with your actual package name if different
+        minSdk = flutter.minSdkVersion
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -28,7 +25,6 @@ configure<ApplicationExtension> {
     }
 }
 
-// Modern Kotlin CompilerOptions configuration block
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)

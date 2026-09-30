@@ -9,6 +9,11 @@ from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from google import genai
 from dotenv import load_dotenv
+import models
+from database import engine
+
+# Create tables automatically if they don't exist
+models.Base.metadata.create_all(bind=engine)
 
 # Load environment variables
 load_dotenv()

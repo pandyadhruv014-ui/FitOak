@@ -1,12 +1,22 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'screens/auth_screens.dart';
 import 'state/daily_tracker_state.dart';
 
-// Global Cloud Backend URL:
 const String baseUrl = "https://backend-um5a.onrender.com";
 
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+  }
+}
+
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  HttpOverrides.global = MyHttpOverrides();
   runApp(const FitOakApp());
 }
 
@@ -74,7 +84,6 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _fetchInitialData() async {
     try {
-      // Ping Render backend to wake up free tier instance
       await http.get(Uri.parse('$baseUrl/')).timeout(const Duration(seconds: 15));
     } catch (e) {
       debugPrint("Backend ping error: $e");
@@ -88,6 +97,12 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Image.asset(
           'assets/splash_background.png',
           fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Container(
+            color: const Color(0xFF121212),
+            child: const Center(
+              child: Icon(Icons.fitness_center, size: 80, color: Colors.deepOrange),
+            ),
+          ),
         ),
       ),
     );
