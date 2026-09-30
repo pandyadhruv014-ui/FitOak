@@ -16,7 +16,7 @@ from database import engine, get_db
 
 load_dotenv()
 
-# --- Force SQL Table Creation ---
+# --- Force SQL Table Creation & Column Schema Migrations ---
 def create_tables_directly():
     create_users_table_sql = """
     CREATE TABLE IF NOT EXISTS users (
@@ -30,19 +30,26 @@ def create_tables_directly():
         is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+    
+    -- Ensure columns exist if table was previously created without them
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR DEFAULT '';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS goal VARCHAR DEFAULT '';
+
     CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
     CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
     """
     try:
         with engine.begin() as conn:
             conn.execute(text(create_users_table_sql))
-        print("Explicit SQL: Created 'users' table successfully.")
+        print("Schema migration complete: Verified 'users' table and missing columns.")
     except Exception as e:
         print(f"Explicit SQL execution error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Execute direct SQL table creation on boot
     create_tables_directly()
     try:
         models.Base.metadata.create_all(bind=engine)
@@ -93,7 +100,6 @@ def read_root():
 
 @app.post("/api/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
-    # Safety fallback to verify table exists right before query
     create_tables_directly()
     
     existing_user = db.query(models.User).filter(models.User.email == user.email).first()
