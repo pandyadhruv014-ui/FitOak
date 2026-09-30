@@ -3,21 +3,22 @@ import json
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from google import genai
 from dotenv import load_dotenv
-import models
+
 import database
+import models
 from database import engine, get_db
 
-# Create tables automatically if they don't exist
-models.Base.metadata.create_all(bind=database.engine)
-
-# Load environment variables
 load_dotenv()
+
+# Safely initialize tables on startup
+try:
+    models.Base.metadata.create_all(bind=engine, checkfirst=True)
+except Exception as e:
+    print(f"Database initialization warning (safe to ignore if tables exist): {e}")
 
 app = FastAPI(title="FitOak Backend")
 
@@ -29,39 +30,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# --- Database Setup (Neon PostgreSQL / Local SQLite Fallback) ---
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./fitoak.db")
-
-if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
-
-if "sqlite" in SQLALCHEMY_DATABASE_URL:
-    engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-else:
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-class UserDB(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
-    email = Column(String, unique=True, index=True)
-    password = Column(String)
-    age = Column(Integer, default=0)
-    gender = Column(String, default="")
-    goal = Column(String, default="")
-
-Base.metadata.create_all(bind=engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # --- Security / Password Hashing ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -95,13 +63,13 @@ def read_root():
 
 @app.post("/api/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
-    existing_user = db.query(UserDB).filter(UserDB.email == user.email).first()
+    existing_user = db.query(models.User).filter(models.User.email == user.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered. Please login.")
     
     hashed_password = pwd_context.hash(user.password)
     
-    db_user = UserDB(
+    db_user = models.User(
         name=user.name,
         email=user.email,
         password=hashed_password,
@@ -116,7 +84,7 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
 
 @app.post("/api/login")
 def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
-    user = db.query(UserDB).filter(UserDB.email == credentials.email).first()
+    user = db.query(models.User).filter(models.User.email == credentials.email).first()
     
     if not user:
         raise HTTPException(
@@ -168,7 +136,6 @@ def analyze_nutrition(request: NutritionRequest):
             contents=prompt,
         )
         
-        # Clean response string and parse JSON
         raw_text = response.text.strip().replace("```json", "").replace("```", "").strip()
         nutrition_data = json.loads(raw_text)
         
