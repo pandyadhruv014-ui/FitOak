@@ -9,23 +9,24 @@ from passlib.context import CryptContext
 from google import genai
 from dotenv import load_dotenv
 
+# IMPORTS MUST BE IN THIS EXACT ORDER
 import database
-import models
-from database import engine, get_db
+import models  # <--- Registers User, Meal, Workout models onto Base.metadata
+from database import engine, get_db, Base
 
 load_dotenv()
 
-# --- Application Lifespan (Ensures Database Schema Initialization) ---
+# --- Force Table Creation on Startup ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Runs on startup: Creates all PostgreSQL tables automatically
     try:
-        models.Base.metadata.create_all(bind=engine, checkfirst=True)
-        print("Database schema verified and tables created successfully.")
+        # Import models inside lifespan to ensure they register on Base
+        import models
+        Base.metadata.create_all(bind=engine)
+        print("Successfully created all database tables!")
     except Exception as e:
-        print(f"Database startup initialization notice: {e}")
+        print(f"Database initialization error: {e}")
     yield
-    # Cleanup on shutdown (if needed)
 
 app = FastAPI(title="FitOak Backend", lifespan=lifespan)
 
@@ -38,14 +39,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Security & Password Hashing ---
+# --- Security / Password Hashing ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# --- Gemini AI Client Initialization ---
+# --- Gemini AI Client Setup ---
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 gemini_client = genai.Client(api_key=gemini_api_key) if gemini_api_key else None
 
-# --- Pydantic Data Validation Schemas ---
+# --- Pydantic Data Models ---
 class UserRegister(BaseModel):
     name: str
     email: str
@@ -70,6 +71,9 @@ def read_root():
 
 @app.post("/api/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
+    # Ensure tables exist right before querying
+    Base.metadata.create_all(bind=engine)
+    
     existing_user = db.query(models.User).filter(models.User.email == user.email).first()
     if existing_user:
         raise HTTPException(
@@ -99,6 +103,8 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
 
 @app.post("/api/login")
 def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
+    Base.metadata.create_all(bind=engine)
+    
     user = db.query(models.User).filter(models.User.email == credentials.email).first()
     
     if not user:
@@ -123,7 +129,6 @@ def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
         }
     }
 
-# --- Gemini AI Nutrition Analyzer Endpoint ---
 @app.post("/api/ai/nutrition")
 def analyze_nutrition(request: NutritionRequest):
     if not gemini_client:
