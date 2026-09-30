@@ -10,10 +10,11 @@ from passlib.context import CryptContext
 from google import genai
 from dotenv import load_dotenv
 import models
-from database import engine
+import database
+from database import engine, get_db
 
 # Create tables automatically if they don't exist
-models.Base.metadata.create_all(bind=engine)
+models.Base.metadata.create_all(bind=database.engine)
 
 # Load environment variables
 load_dotenv()
