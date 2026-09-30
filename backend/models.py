@@ -11,6 +11,9 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
+    dob = Column(String, default="")
+    height_cm = Column(Float, default=0.0)
+    weight_kg = Column(Float, default=0.0)
     age = Column(Integer, default=0)
     gender = Column(String, default="")
     goal = Column(String, default="")
@@ -22,11 +25,17 @@ class Workout(Base):
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
+    workout_type = Column(String, default="Strength")  # Strength / Cardio
     muscle = Column(String, index=True)
     exercise = Column(String)
-    sets_count = Column(Integer)
-    max_weight = Column(Float)
-    calories_burned = Column(Integer)
+    sets_count = Column(Integer, default=0)
+    max_weight = Column(Float, default=0.0)
+    duration_mins = Column(Integer, default=0)
+    speed_kmh = Column(Float, default=0.0)
+    incline = Column(Float, default=0.0)
+    calories_burned = Column(Integer, default=0)
+    estimated_fat_loss_g = Column(Float, default=0.0)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Meal(Base):
@@ -34,9 +43,11 @@ class Meal(Base):
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
     name = Column(String)
-    calories = Column(Integer)
-    protein = Column(Integer)
-    carbs = Column(Integer)
-    fat = Column(Integer)
+    quantity = Column(String, default="")
+    calories = Column(Integer, default=0)
+    protein = Column(Float, default=0.0)
+    carbs = Column(Float, default=0.0)
+    fat = Column(Float, default=0.0)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)

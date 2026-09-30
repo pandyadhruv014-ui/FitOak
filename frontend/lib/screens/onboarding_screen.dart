@@ -1,184 +1,207 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import '../main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'main_app_shell.dart';
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  final String name;
+  final String email;
+  final String password;
+
+  const OnboardingScreen({
+    super.key,
+    required this.name,
+    required this.email,
+    required this.password,
+  });
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final PageController _pageController = PageController();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _ageController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  final String backendUrl = "https://backend-um5a.onrender.com";
 
-  String _gender = 'Male';
-  String _fitnessGoal = 'Build Muscle';
-  bool _isLoading = false;
+  final _dobController = TextEditingController();
+  final _heightController = TextEditingController();
+  final _weightController = TextEditingController();
 
-  @override
-  void dispose() {
-    _pageController.dispose();
-    _nameController.dispose();
-    _ageController.dispose();
-    super.dispose();
-  }
+  String selectedGender = 'Male';
+  String selectedGoal = 'Build Muscle';
+  bool isLoading = false;
 
-  Future<void> _submitRegistration() async {
-    setState(() => _isLoading = true);
+  final List<String> genderOptions = ['Male', 'Female', 'Other'];
+  final List<String> goalOptions = ['Build Muscle', 'Fat Loss', 'Maintain Fitness', 'Increase Endurance'];
+
+  Future<void> _completeRegistration() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => isLoading = true);
 
     try {
-      await http.post(
-        Uri.parse('$baseUrl/register'),
-        headers: const {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'name': _nameController.text.trim(),
-          'age': int.tryParse(_ageController.text) ?? 20,
-          'gender': _gender,
-          'goal': _fitnessGoal,
+      final response = await http.post(
+        Uri.parse('$backendUrl/api/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'name': widget.name,
+          'email': widget.email,
+          'password': widget.password,
+          'dob': _dobController.text,
+          'height_cm': double.tryParse(_heightController.text) ?? 0.0,
+          'weight_kg': double.tryParse(_weightController.text) ?? 0.0,
+          'gender': selectedGender,
+          'goal': selectedGoal,
         }),
       );
 
-      if (!mounted) return;
-      _navigateToShell();
-    } catch (_) {
-      if (mounted) _navigateToShell();
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
+      final data = json.decode(response.body);
 
-  void _navigateToShell() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const MainAppShell()),
-    );
+      if (response.statusCode == 200 && data['status'] == 'success') {
+        final prefs = await SharedPreferences.getInstance();
+        final user = data['user'];
+        await prefs.setInt('user_id', user['id']);
+        await prefs.setString('user_name', user['name']);
+        await prefs.setString('user_email', user['email']);
+
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const MainAppShell()),
+            (route) => false,
+          );
+        }
+      } else {
+        throw Exception(data['detail'] ?? "Registration failed");
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: PageView(
-          controller: _pageController,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            _buildWelcomeStep(),
-            _buildUserInfoStep(),
-            _buildGoalStep(),
-          ],
-        ),
+      appBar: AppBar(
+        title: const Text("Complete Your Profile"),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
-    );
-  }
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Personal Details",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "This helps FitOak calculate accurate calorie targets and personalized fitness metrics.",
+                style: TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+              const SizedBox(height: 24),
 
-  Widget _buildWelcomeStep() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.fitness_center, size: 80, color: Colors.deepOrange),
-          const SizedBox(height: 20),
-          const Text('Welcome to FitOak', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          const Text('Your personal AI-driven fitness and strength coach.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-          const SizedBox(height: 40),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, minimumSize: const Size.fromHeight(50)),
-            onPressed: () => _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut),
-            child: const Text('Get Started', style: TextStyle(color: Colors.white, fontSize: 16)),
-          )
-        ],
-      ),
-    );
-  }
+              TextFormField(
+                controller: _dobController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: "Date of Birth (DD/MM/YYYY)",
+                  prefixIcon: const Icon(Icons.calendar_today, color: Colors.orange),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                validator: (val) => val == null || val.isEmpty ? "Please enter DOB" : null,
+              ),
+              const SizedBox(height: 16),
 
-  Widget _buildUserInfoStep() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('About You', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 15),
-          TextField(
-            controller: _ageController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Age', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 15),
-          DropdownButtonFormField<String>(
-            initialValue: _gender,
-            decoration: const InputDecoration(labelText: 'Gender', border: OutlineInputBorder()),
-            items: ['Male', 'Female', 'Other'].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-            onChanged: (val) {
-              if (val != null) setState(() => _gender = val);
-            },
-          ),
-          const SizedBox(height: 30),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, minimumSize: const Size.fromHeight(50)),
-            onPressed: () => _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut),
-            child: const Text('Next', style: TextStyle(color: Colors.white, fontSize: 16)),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGoalStep() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('Choose Your Goal', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          _buildGoalOption('Build Muscle'),
-          _buildGoalOption('Weight Loss'),
-          _buildGoalOption('General Fitness'),
-          const SizedBox(height: 30),
-          _isLoading
-              ? const CircularProgressIndicator(color: Colors.deepOrange)
-              : ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepOrange,
-                    minimumSize: const Size.fromHeight(50),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _heightController,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "Height (cm)",
+                        prefixIcon: const Icon(Icons.height, color: Colors.orange),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (val) => val == null || val.isEmpty ? "Required" : null,
+                    ),
                   ),
-                  onPressed: _submitRegistration,
-                  child: const Text('Complete Setup', style: TextStyle(color: Colors.white, fontSize: 16)),
-                )
-        ],
-      ),
-    );
-  }
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _weightController,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "Weight (kg)",
+                        prefixIcon: const Icon(Icons.monitor_weight, color: Colors.orange),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (val) => val == null || val.isEmpty ? "Required" : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
 
-  Widget _buildGoalOption(String title) {
-    return InkWell(
-      onTap: () => setState(() => _fitnessGoal = title),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: Row(
-          children: [
-            RadioGroup<String>(
-              groupValue: _fitnessGoal,
-              onChanged: (val) {
-                if (val != null) setState(() => _fitnessGoal = val);
-              },
-              child: Radio<String>(value: title),
-            ),
-            Text(title, style: const TextStyle(fontSize: 16)),
-          ],
+              DropdownButtonFormField<String>(
+                initialValue: selectedGender,
+                dropdownColor: const Color(0xFF1E1E1E),
+                decoration: InputDecoration(
+                  labelText: "Gender",
+                  prefixIcon: const Icon(Icons.person, color: Colors.orange),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                items: genderOptions.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                onChanged: (val) => setState(() => selectedGender = val!),
+              ),
+              const SizedBox(height: 16),
+
+              DropdownButtonFormField<String>(
+                initialValue: selectedGoal,
+                dropdownColor: const Color(0xFF1E1E1E),
+                decoration: InputDecoration(
+                  labelText: "Primary Fitness Goal",
+                  prefixIcon: const Icon(Icons.track_changes, color: Colors.orange),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                items: goalOptions.map((goal) => DropdownMenuItem(value: goal, child: Text(goal))).toList(),
+                onChanged: (val) => setState(() => selectedGoal = val!),
+              ),
+              const SizedBox(height: 32),
+
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: isLoading ? null : _completeRegistration,
+                  child: isLoading
+                      ? const CircularProgressIndicator(color: Colors.black)
+                      : const Text(
+                          "Get Started",
+                          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

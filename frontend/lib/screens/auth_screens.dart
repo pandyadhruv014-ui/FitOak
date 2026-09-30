@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../main.dart';
+import '../state/daily_tracker_state.dart';
 import 'main_app_shell.dart';
 
 class AuthGateScreen extends StatefulWidget {
@@ -18,12 +19,20 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  final TextEditingController dobController = TextEditingController();
+  final TextEditingController heightController = TextEditingController();
+  final TextEditingController weightController = TextEditingController();
+
+  String selectedGoal = "Build Muscle";
 
   @override
   void dispose() {
     nameController.dispose();
     emailController.dispose();
     passwordController.dispose();
+    dobController.dispose();
+    heightController.dispose();
+    weightController.dispose();
     super.dispose();
   }
 
@@ -51,6 +60,9 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
     final name = nameController.text.trim();
+    final dob = dobController.text.trim();
+    final height = double.tryParse(heightController.text.trim()) ?? 0.0;
+    final weight = double.tryParse(weightController.text.trim()) ?? 0.0;
 
     if (email.isEmpty || password.isEmpty || (!isLogin && name.isEmpty)) {
       _showWarningDialog("Validation Error", "Please fill in all required fields.");
@@ -70,9 +82,15 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
 
       final bodyData = isLogin
           ? jsonEncode({"email": email, "password": password})
-          : jsonEncode({"name": name, "email": email, "password": password});
-
-      debugPrint("POSTING TO: $endpoint");
+          : jsonEncode({
+              "name": name,
+              "email": email,
+              "password": password,
+              "dob": dob,
+              "height_cm": height,
+              "weight_kg": weight,
+              "goal": selectedGoal,
+            });
 
       final response = await http
           .post(
@@ -82,29 +100,36 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
           )
           .timeout(const Duration(seconds: 40));
 
-      debugPrint("HTTP STATUS: ${response.statusCode}");
-      debugPrint("RESPONSE BODY: ${response.body}");
-
       if (!mounted) return;
 
-      // SAFELY HANDLE RESPONSE JSON OR TEXT
       dynamic data;
       try {
         data = jsonDecode(response.body);
       } catch (_) {
-        data = null; // Response body is plain text / HTML error
+        data = null;
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final userName = (data != null && data['user'] != null)
-            ? data['user']['name']
-            : (name.isNotEmpty ? name : 'User');
+        if (data != null && data['user'] != null) {
+          final user = data['user'];
+          // Fixed parameter names to match DailyTrackerState
+          await dailyTracker.saveUserSession(
+            id: user['id'] ?? 0,
+            name: user['name'] ?? name,
+            userEmail: user['email'] ?? email,
+            dobVal: user['dob'] ?? dob,
+            height: (user['height_cm'] as num?)?.toDouble() ?? height,
+            weight: (user['weight_kg'] as num?)?.toDouble() ?? weight,
+          );
+        }
+
+        if (!mounted) return;
 
         if (isLogin) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               backgroundColor: Colors.green,
-              content: Text("Welcome back, $userName!"),
+              content: Text("Welcome back, ${dailyTracker.fullName}!"),
             ),
           );
 
@@ -128,17 +153,12 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
       } else {
         String errorMessage = (data != null && data['detail'] != null)
             ? data['detail'].toString()
-            : "Server returned error (${response.statusCode}): ${response.body}";
-
-        _showWarningDialog("Backend Notice", errorMessage);
+            : "Server error (${response.statusCode}): ${response.body}";
+        _showWarningDialog("Authentication Error", errorMessage);
       }
     } catch (e) {
-      debugPrint("AUTHENTICATION EXCEPTION: $e");
       if (!mounted) return;
-      _showWarningDialog(
-        "Connection Error",
-        "Could not connect to backend server ($baseUrl).\n\nException: $e",
-      );
+      _showWarningDialog("Connection Error", "Could not connect to server: $e");
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -164,38 +184,92 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 28),
 
                 if (!isLogin) ...[
                   TextField(
                     controller: nameController,
-                    textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       labelText: "Full Name",
                       prefixIcon: Icon(Icons.person, color: Colors.deepOrange),
                       border: OutlineInputBorder(),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: dobController,
+                          decoration: const InputDecoration(
+                            labelText: "DOB (YYYY-MM-DD)",
+                            prefixIcon: Icon(Icons.cake, color: Colors.deepOrange),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: heightController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: "Height (cm)",
+                            prefixIcon: Icon(Icons.height, color: Colors.deepOrange),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: weightController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: "Weight (kg)",
+                            prefixIcon: Icon(Icons.monitor_weight, color: Colors.deepOrange),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedGoal,
+                    decoration: const InputDecoration(
+                      labelText: "Primary Goal",
+                      prefixIcon: Icon(Icons.flag, color: Colors.deepOrange),
+                      border: OutlineInputBorder(),
+                    ),
+                    items: ['Build Muscle', 'Weight Loss', 'General Fitness']
+                        .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => selectedGoal = val);
+                    },
+                  ),
+                  const SizedBox(height: 14),
                 ],
 
                 TextField(
                   controller: emailController,
                   keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
                     labelText: "Email Address",
                     prefixIcon: Icon(Icons.email, color: Colors.deepOrange),
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
                 TextField(
                   controller: passwordController,
                   obscureText: true,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _submitAuth(),
                   decoration: const InputDecoration(
                     labelText: "Password",
                     prefixIcon: Icon(Icons.lock, color: Colors.deepOrange),
@@ -241,11 +315,7 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
                       style: const TextStyle(color: Colors.grey),
                     ),
                     TextButton(
-                      onPressed: () {
-                        setState(() {
-                          isLogin = !isLogin;
-                        });
-                      },
+                      onPressed: () => setState(() => isLogin = !isLogin),
                       child: Text(
                         isLogin ? "Register" : "Log In",
                         style: const TextStyle(

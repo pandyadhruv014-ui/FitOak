@@ -16,14 +16,17 @@ from database import engine, get_db
 
 load_dotenv()
 
-# --- Force SQL Table Creation & Column Schema Migrations ---
-def create_tables_directly():
-    create_users_table_sql = """
+# --- Automatic SQL Table & Column Patching ---
+def sync_database_schema():
+    schema_sql = """
     CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         name VARCHAR NOT NULL,
         email VARCHAR UNIQUE NOT NULL,
         password VARCHAR NOT NULL,
+        dob VARCHAR DEFAULT '',
+        height_cm FLOAT DEFAULT 0.0,
+        weight_kg FLOAT DEFAULT 0.0,
         age INTEGER DEFAULT 0,
         gender VARCHAR DEFAULT '',
         goal VARCHAR DEFAULT '',
@@ -31,30 +34,60 @@ def create_tables_directly():
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
     
-    -- Ensure columns exist if table was previously created without them
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS dob VARCHAR DEFAULT '';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS height_cm FLOAT DEFAULT 0.0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS weight_kg FLOAT DEFAULT 0.0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS goal VARCHAR DEFAULT '';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+    CREATE TABLE IF NOT EXISTS workouts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        workout_type VARCHAR DEFAULT 'Strength',
+        muscle VARCHAR,
+        exercise VARCHAR,
+        sets_count INTEGER DEFAULT 0,
+        max_weight FLOAT DEFAULT 0.0,
+        duration_mins INTEGER DEFAULT 0,
+        speed_kmh FLOAT DEFAULT 0.0,
+        incline FLOAT DEFAULT 0.0,
+        calories_burned INTEGER DEFAULT 0,
+        estimated_fat_loss_g FLOAT DEFAULT 0.0,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS meals (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        name VARCHAR,
+        quantity VARCHAR DEFAULT '',
+        calories INTEGER DEFAULT 0,
+        protein FLOAT DEFAULT 0.0,
+        carbs FLOAT DEFAULT 0.0,
+        fat FLOAT DEFAULT 0.0,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
 
     CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
     CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
     """
     try:
         with engine.begin() as conn:
-            conn.execute(text(create_users_table_sql))
-        print("Schema migration complete: Verified 'users' table and missing columns.")
+            conn.execute(text(schema_sql))
+        print("Schema sync complete: Verified tables and applied migrations.")
     except Exception as e:
-        print(f"Explicit SQL execution error: {e}")
+        print(f"Database schema sync warning: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_tables_directly()
+    sync_database_schema()
     try:
         models.Base.metadata.create_all(bind=engine)
     except Exception as e:
-        print(f"ORM metadata initialization error: {e}")
+        print(f"ORM initialization error: {e}")
     yield
 
 app = FastAPI(title="FitOak Backend", lifespan=lifespan)
@@ -68,7 +101,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Security & Hashing ---
+# --- Password Hashing Setup ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # --- Gemini AI Client Setup ---
@@ -80,6 +113,9 @@ class UserRegister(BaseModel):
     name: str
     email: str
     password: str
+    dob: str = ""
+    height_cm: float = 0.0
+    weight_kg: float = 0.0
     age: int = 0
     gender: str = ""
     goal: str = ""
@@ -89,7 +125,28 @@ class UserLogin(BaseModel):
     password: str
 
 class NutritionRequest(BaseModel):
-    meal_description: str
+    dish_name: str
+    quantity: str
+
+class WorkoutCreate(BaseModel):
+    user_id: int
+    workout_type: str = "Strength"
+    muscle: str = ""
+    exercise: str = ""
+    sets_count: int = 0
+    max_weight: float = 0.0
+    duration_mins: int = 0
+    speed_kmh: float = 0.0
+    incline: float = 0.0
+
+class MealCreate(BaseModel):
+    user_id: int
+    name: str
+    quantity: str
+    calories: int
+    protein: float
+    carbs: float
+    fat: float
 
 
 # --- API ENDPOINTS ---
@@ -100,8 +157,7 @@ def read_root():
 
 @app.post("/api/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
-    create_tables_directly()
-    
+    sync_database_schema()
     existing_user = db.query(models.User).filter(models.User.email == user.email).first()
     if existing_user:
         raise HTTPException(
@@ -115,6 +171,9 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
         name=user.name,
         email=user.email,
         password=hashed_password,
+        dob=user.dob,
+        height_cm=user.height_cm,
+        weight_kg=user.weight_kg,
         age=user.age,
         gender=user.gender,
         goal=user.goal
@@ -126,13 +185,19 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
     return {
         "status": "success",
         "message": "User registered successfully!",
-        "user_id": db_user.id
+        "user": {
+            "id": db_user.id,
+            "name": db_user.name,
+            "email": db_user.email,
+            "dob": db_user.dob,
+            "height_cm": db_user.height_cm,
+            "weight_kg": db_user.weight_kg
+        }
     }
 
 @app.post("/api/login")
 def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
-    create_tables_directly()
-    
+    sync_database_schema()
     user = db.query(models.User).filter(models.User.email == credentials.email).first()
     
     if not user:
@@ -153,10 +218,34 @@ def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
         "user": {
             "id": user.id,
             "name": user.name,
-            "email": user.email
+            "email": user.email,
+            "dob": user.dob,
+            "height_cm": user.height_cm,
+            "weight_kg": user.weight_kg,
+            "age": user.age,
+            "gender": user.gender,
+            "goal": user.goal
         }
     }
 
+@app.get("/api/user/{user_id}")
+def get_user_profile(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "dob": user.dob,
+        "height_cm": user.height_cm,
+        "weight_kg": user.weight_kg,
+        "age": user.age,
+        "gender": user.gender,
+        "goal": user.goal
+    }
+
+# --- Gemini AI Automated Nutrition Analyzer Endpoint ---
 @app.post("/api/ai/nutrition")
 def analyze_nutrition(request: NutritionRequest):
     if not gemini_client:
@@ -166,16 +255,16 @@ def analyze_nutrition(request: NutritionRequest):
         )
     
     prompt = f"""
-    Analyze the following meal and calculate its nutritional breakdown: "{request.meal_description}".
-    Return ONLY a valid JSON object without markdown formatting blocks, matching this structure:
+    Calculate precise nutrition for dish: "{request.dish_name}", quantity/portion: "{request.quantity}".
+    Return ONLY a valid JSON object matching this structure:
     {{
-      "meal_name": "Short summary name of meal",
-      "calories": 0,
-      "protein_g": 0.0,
-      "carbs_g": 0.0,
-      "fat_g": 0.0,
-      "health_score": "1-10 string rating",
-      "tips": "Brief actionable nutrition advice"
+      "meal_name": "{request.dish_name}",
+      "calories": 250,
+      "protein_g": 15.0,
+      "carbs_g": 30.0,
+      "fat_g": 8.0,
+      "health_score": "8/10",
+      "tips": "Good balance of macronutrients."
     }}
     """
     
@@ -184,13 +273,68 @@ def analyze_nutrition(request: NutritionRequest):
             model='gemini-2.5-flash',
             contents=prompt,
         )
-        
         raw_text = response.text.strip().replace("```json", "").replace("```", "").strip()
         nutrition_data = json.loads(raw_text)
-        
         return {"status": "success", "data": nutrition_data}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Gemini AI processing failed: {str(e)}"
         )
+
+# --- Workouts & Meals Logging API ---
+@app.post("/api/workouts")
+def create_workout(workout: WorkoutCreate, db: Session = Depends(get_db)):
+    calories = 0
+    fat_loss = 0.0
+    
+    if workout.workout_type == "Cardio":
+        # Estimate cardio calories & fat loss
+        calories = int(workout.duration_mins * (workout.speed_kmh * 0.8 + 3.0))
+        fat_loss = round((calories / 7700.0) * 1000.0, 2)  # Grams of fat
+    else:
+        calories = workout.sets_count * 15
+
+    db_workout = models.Workout(
+        user_id=workout.user_id,
+        workout_type=workout.workout_type,
+        muscle=workout.muscle,
+        exercise=workout.exercise,
+        sets_count=workout.sets_count,
+        max_weight=workout.max_weight,
+        duration_mins=workout.duration_mins,
+        speed_kmh=workout.speed_kmh,
+        incline=workout.incline,
+        calories_burned=calories,
+        estimated_fat_loss_g=fat_loss
+    )
+    db.add(db_workout)
+    db.commit()
+    db.refresh(db_workout)
+    return {"status": "success", "workout": db_workout}
+
+@app.get("/api/workouts/{user_id}")
+def get_user_workouts(user_id: int, db: Session = Depends(get_db)):
+    workouts = db.query(models.Workout).filter(models.Workout.user_id == user_id).all()
+    return {"status": "success", "workouts": workouts}
+
+@app.post("/api/meals")
+def create_meal(meal: MealCreate, db: Session = Depends(get_db)):
+    db_meal = models.Meal(
+        user_id=meal.user_id,
+        name=meal.name,
+        quantity=meal.quantity,
+        calories=meal.calories,
+        protein=meal.protein,
+        carbs=meal.carbs,
+        fat=meal.fat
+    )
+    db.add(db_meal)
+    db.commit()
+    db.refresh(db_meal)
+    return {"status": "success", "meal": db_meal}
+
+@app.get("/api/meals/{user_id}")
+def get_user_meals(user_id: int, db: Session = Depends(get_db)):
+    meals = db.query(models.Meal).filter(models.Meal.user_id == user_id).all()
+    return {"status": "success", "meals": meals}

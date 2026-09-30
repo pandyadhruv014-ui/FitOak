@@ -1,67 +1,26 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'screens/auth_screens.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'state/daily_tracker_state.dart';
+import 'screens/auth_screens.dart';
+import 'screens/main_app_shell.dart';
 
 const String baseUrl = "https://backend-um5a.onrender.com";
 
-class MyHttpOverrides extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) {
-    return super.createHttpClient(context)
-      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
-  }
-}
-
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  HttpOverrides.global = MyHttpOverrides();
   runApp(const FitOakApp());
 }
 
-class FitOakApp extends StatelessWidget {
+class FitOakApp extends StatefulWidget {
   const FitOakApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: dailyTracker,
-      builder: (context, _) {
-        return MaterialApp(
-          title: 'FitOak',
-          debugShowCheckedModeBanner: false,
-          themeMode: dailyTracker.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-          theme: ThemeData.light().copyWith(
-            primaryColor: Colors.deepOrange,
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.deepOrange,
-              foregroundColor: Colors.white,
-            ),
-          ),
-          darkTheme: ThemeData.dark().copyWith(
-            primaryColor: Colors.deepOrange,
-            scaffoldBackgroundColor: const Color(0xFF121212),
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Color(0xFF1E1E1E),
-            ),
-          ),
-          home: const SplashScreen(nextScreen: AuthGateScreen()),
-        );
-      },
-    );
-  }
+  State<FitOakApp> createState() => _FitOakAppState();
 }
 
-class SplashScreen extends StatefulWidget {
-  final Widget nextScreen;
-  const SplashScreen({super.key, required this.nextScreen});
+class _FitOakAppState extends State<FitOakApp> {
+  bool _isLoading = true;
 
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
@@ -69,42 +28,56 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _initializeApp() async {
-    await Future.wait([
-      Future.delayed(const Duration(milliseconds: 2500)),
-      _fetchInitialData(),
-    ]);
+    // Request app permissions on app startup
+    await [
+      Permission.notification,
+      Permission.activityRecognition,
+      Permission.location,
+    ].request();
+
+    // Check saved local login session
+    await dailyTracker.checkSavedSession();
 
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => widget.nextScreen),
-      );
-    }
-  }
-
-  Future<void> _fetchInitialData() async {
-    try {
-      await http.get(Uri.parse('$baseUrl/')).timeout(const Duration(seconds: 15));
-    } catch (e) {
-      debugPrint("Backend ping error: $e");
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SizedBox.expand(
-        child: Image.asset(
-          'assets/splash_background.png',
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Container(
-            color: const Color(0xFF121212),
-            child: const Center(
-              child: Icon(Icons.fitness_center, size: 80, color: Colors.deepOrange),
-            ),
+    if (_isLoading) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          backgroundColor: Color(0xFF121212),
+          body: Center(
+            child: CircularProgressIndicator(color: Colors.deepOrange),
           ),
         ),
-      ),
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: dailyTracker,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'FitOak',
+          debugShowCheckedModeBanner: false,
+          themeMode: dailyTracker.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          darkTheme: ThemeData.dark().copyWith(
+            scaffoldBackgroundColor: const Color(0xFF121212),
+            primaryColor: Colors.deepOrange,
+            colorScheme: const ColorScheme.dark(primary: Colors.deepOrange),
+          ),
+          theme: ThemeData.light().copyWith(
+            primaryColor: Colors.deepOrange,
+            colorScheme: const ColorScheme.light(primary: Colors.deepOrange),
+          ),
+          home: dailyTracker.isLoggedIn
+              ? const MainAppShell()
+              : const AuthGateScreen(),
+        );
+      },
     );
   }
 }

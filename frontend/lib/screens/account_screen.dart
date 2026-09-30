@@ -11,8 +11,7 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   bool activityRecognitionGranted = true;
-  bool locationPermissionGranted = false;
-  bool notificationPermissionGranted = true;
+  bool locationPermissionGranted = true;
 
   @override
   Widget build(BuildContext context) {
@@ -52,18 +51,24 @@ class _AccountScreenState extends State<AccountScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("Your Body Metrics & Goals", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                      const Text("Your Body Metrics & Profile",
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
                       const Divider(height: 20),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _metricItem("Age", "${dailyTracker.age} yrs"),
+                          _metricItem("DOB", dailyTracker.dob.isEmpty ? "N/A" : dailyTracker.dob),
                           _metricItem("Height", "${dailyTracker.heightCm} cm"),
                           _metricItem("Weight", "${dailyTracker.weightKg} kg"),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      Center(child: Text("Primary Goal: ${dailyTracker.fitnessGoal}", style: const TextStyle(fontSize: 13, color: Colors.amber, fontWeight: FontWeight.w600))),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: Text(
+                          "Primary Goal: ${dailyTracker.fitnessGoal}",
+                          style: const TextStyle(fontSize: 13, color: Colors.amber, fontWeight: FontWeight.w600),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -101,9 +106,9 @@ class _AccountScreenState extends State<AccountScreen> {
                   await dailyTracker.logoutUser();
                   if (!context.mounted) return;
                   Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AuthGateScreen()),
-                  (route) => false,
+                    context,
+                    MaterialPageRoute(builder: (_) => const AuthGateScreen()),
+                    (route) => false,
                   );
                 },
               ),
@@ -117,7 +122,7 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget _metricItem(String label, String value) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
         const SizedBox(height: 2),
         Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
       ],

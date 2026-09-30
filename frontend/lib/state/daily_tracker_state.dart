@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SetLog {
   int setNumber;
@@ -17,6 +18,11 @@ class SetLog {
 }
 
 class DailyTrackerState extends ChangeNotifier {
+  // --- Auth & Session State ---
+  bool isLoggedIn = false;
+  int userId = 0;
+  String dob = "";
+
   // --- Profile Data ---
   String fullName = "Dhruv Pandya";
   String email = "user@fitoak.com";
@@ -41,7 +47,8 @@ class DailyTrackerState extends ChangeNotifier {
   List<Map<String, dynamic>> workoutLog = [];
 
   // --- Notifications Plugin ---
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
 
   // --- Personal Best PR Records ---
   Map<String, Map<String, double>> personalRecords = {};
@@ -60,13 +67,22 @@ class DailyTrackerState extends ChangeNotifier {
   // Dynamic Weekly Consumed Aggregator for Chart
   List<Map<String, dynamic>> get weeklyProgressData {
     List<String> days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    List<String> fullDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    List<String> fullDays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday'
+    ];
 
     return List.generate(7, (index) {
       String fullDay = fullDays[index];
       List<Map<String, dynamic>> dayMeals = weeklyUserDietLog[fullDay] ?? [];
-      
-      int dayCalories = dayMeals.fold(0, (sum, meal) => sum + ((meal['calories'] ?? 0) as int));
+
+      int dayCalories =
+          dayMeals.fold(0, (sum, meal) => sum + ((meal['calories'] ?? 0) as int));
 
       return {
         'day': days[index],
@@ -77,13 +93,58 @@ class DailyTrackerState extends ChangeNotifier {
   }
 
   // Today's Macros Calculated from Logged Meals
-  int get totalCalories => todayLog.fold(0, (sum, item) => sum + ((item['calories'] ?? 0) as int));
-  int get totalProtein => todayLog.fold(0, (sum, item) => sum + ((item['protein'] ?? 0) as int));
-  int get totalCarbs => todayLog.fold(0, (sum, item) => sum + ((item['carbs'] ?? 0) as int));
-  int get totalFat => todayLog.fold(0, (sum, item) => sum + ((item['fat'] ?? 0) as int));
+  int get totalCalories =>
+      todayLog.fold(0, (sum, item) => sum + ((item['calories'] ?? 0) as int));
+  int get totalProtein =>
+      todayLog.fold(0, (sum, item) => sum + ((item['protein'] ?? 0) as int));
+  int get totalCarbs =>
+      todayLog.fold(0, (sum, item) => sum + ((item['carbs'] ?? 0) as int));
+  int get totalFat =>
+      todayLog.fold(0, (sum, item) => sum + ((item['fat'] ?? 0) as int));
 
   DailyTrackerState() {
     _initNotifications();
+    checkSavedSession();
+  }
+
+  // --- Session Management Methods (Required by main, auth, account screens) ---
+  Future<void> checkSavedSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+    userId = prefs.getInt('userId') ?? 0;
+    fullName = prefs.getString('userName') ?? fullName;
+    email = prefs.getString('userEmail') ?? email;
+    dob = prefs.getString('dob') ?? dob;
+    heightCm = prefs.getDouble('heightCm') ?? heightCm;
+    weightKg = prefs.getDouble('weightKg') ?? weightKg;
+    notifyListeners();
+  }
+
+  Future<void> saveUserSession({
+    required int id,
+    required String name,
+    required String userEmail,
+    String dobVal = "",
+    double height = 0.0,
+    double weight = 0.0,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isLoggedIn', true);
+    await prefs.setInt('userId', id);
+    await prefs.setString('userName', name);
+    await prefs.setString('userEmail', userEmail);
+    await prefs.setString('dob', dobVal);
+    if (height > 0) await prefs.setDouble('heightCm', height);
+    if (weight > 0) await prefs.setDouble('weightKg', weight);
+
+    isLoggedIn = true;
+    userId = id;
+    fullName = name;
+    email = userEmail;
+    if (dobVal.isNotEmpty) dob = dobVal;
+    if (height > 0) heightCm = height;
+    if (weight > 0) weightKg = weight;
+    notifyListeners();
   }
 
   Future<void> _initNotifications() async {
@@ -189,7 +250,8 @@ class DailyTrackerState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void logCardioSession(String type, int durationMins, double distance, int calories) {
+  void logCardioSession(
+      String type, int durationMins, double distance, int calories) {
     totalCaloriesBurned += calories;
     distanceKm += distance;
     workoutLog.add({
@@ -203,7 +265,8 @@ class DailyTrackerState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void syncDeviceHealthData({required int steps, required double distance, required int burnedCals}) {
+  void syncDeviceHealthData(
+      {required int steps, required double distance, required int burnedCals}) {
     isHealthPermissionGranted = true;
     dailySteps += steps;
     distanceKm += distance;
@@ -216,6 +279,11 @@ class DailyTrackerState extends ChangeNotifier {
   }
 
   Future<void> logoutUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
+    isLoggedIn = false;
+    userId = 0;
     todayLog.clear();
     workoutLog.clear();
     weeklyUserDietLog.forEach((key, value) => value.clear());

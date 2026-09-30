@@ -6,6 +6,16 @@ import '../state/daily_tracker_state.dart';
 import 'diet_screen.dart';
 import 'trackers_screen.dart';
 
+// Alias for Diet Screen integration in Hub
+class DietTabScreen extends StatelessWidget {
+  const DietTabScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const DietScreen();
+  }
+}
+
 class WorkoutHubScreen extends StatelessWidget {
   const WorkoutHubScreen({super.key});
 
@@ -151,13 +161,13 @@ class StrengthMuscleSelectorScreen extends StatefulWidget {
 
 class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScreen> {
   final Map<String, List<String>> muscleExerciseMap = {
-    'Chest': ['Incline Barbell Bench Press', 'Flat Dumbbell Press', 'Chest Flyes', 'Dips', 'Cable Crossover', 'Decline Press'],
-    'Back': ['Lat Pulldowns', 'Barbell Bent-Over Rows', 'Deadlifts', 'Face Pulls', 'Single-Arm Dumbbell Rows', 'T-Bar Rows'],
-    'Shoulders': ['Overhead Shoulder Press', 'Lateral Raises', 'Front Raises', 'Rear Delt Flyes', 'Arnold Press', 'Shrugs'],
-    'Biceps': ['Barbell Curls', 'Hammer Curls', 'Preacher Curls', 'Incline Dumbbell Curls', 'Concentration Curls'],
-    'Triceps': ['Triceps Rope Pushdowns', 'Skull Crushers', 'Overhead Extensions', 'Close-Grip Bench Press', 'Dips'],
-    'Legs': ['Barbell Squats', 'Leg Press', 'Romanian Deadlifts', 'Leg Extensions', 'Hamstring Curls', 'Calf Raises'],
-    'Abs': ['Cable Crunches', 'Hanging Leg Raises', 'Plank Holds', 'Russian Twists', 'Ab Wheel Rollouts'],
+    'Chest': ['Incline Barbell Bench Press', 'Incline Dumbbell Press', 'Pec Dec Flyes', 'Cable Chest Flyes', 'Flat Dumbbell Press', 'Dips'],
+    'Back': ['Seated Rows Cable Machine', 'Lat Pulldowns (Wide Grip)', 'Lat Pulldowns (Close Grip)', 'Lat Pulldowns (Underhand Grip)', 'Barbell Bent-Over Rows', 'Deadlifts', 'Face Pulls'],
+    'Shoulders': ['Cable Lateral Raises', 'Cable Front Raises', 'Face Pulls', 'Overhead Shoulder Press', 'Arnold Press', 'Rear Delt Flyes'],
+    'Biceps': ['Cable Bicep Curls', 'Rope Curls', 'Wide Grip Cable Rod Curls', 'Barbell Curls', 'Hammer Curls', 'Preacher Curls'],
+    'Triceps': ['Triceps Rod Pushdown', 'Single Arm Triceps Pushdown', 'Triceps Rope Pushdowns', 'Skull Crushers', 'Overhead Extensions'],
+    'Legs': ['Bulgarian Split Squat', 'Hack Squat', 'Barbell Squats', 'Leg Press', 'Romanian Deadlifts', 'Leg Extensions', 'Hamstring Curls'],
+    'Abs': ['Cable Crunches', 'Hanging Leg Raises', 'Plank Holds', 'Russian Twists'],
   };
 
   String? selectedMuscle;
@@ -353,12 +363,12 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
   String _selectedExercise = 'Bench Press';
 
   final Map<String, List<String>> _exercises = {
-    'Chest': ['Bench Press', 'Incline Dumbbell Press', 'Dips'],
-    'Back': ['Deadlift', 'Barbell Row', 'Lat Pulldown'],
-    'Legs': ['Barbell Squat', 'Leg Press', 'Romanian Deadlift'],
-    'Shoulders': ['Overhead Press', 'Lateral Raise'],
-    'Biceps': ['Barbell Curl', 'Preacher Curl'],
-    'Triceps': ['Skull Crushers', 'Rope Pushdown'],
+    'Chest': ['Incline Dumbbell Press', 'Pec Dec Flyes', 'Cable Chest Flyes', 'Bench Press'],
+    'Back': ['Seated Rows Cable Machine', 'Lat Pulldowns', 'Deadlift'],
+    'Legs': ['Bulgarian Split Squat', 'Hack Squat', 'Barbell Squat'],
+    'Shoulders': ['Cable Lateral Raises', 'Cable Front Raises', 'Face Pulls'],
+    'Biceps': ['Cable Bicep Curls', 'Rope Curls', 'Wide Grip Cable Rod Curls'],
+    'Triceps': ['Triceps Rod Pushdown', 'Single Arm Triceps Pushdown', 'Skull Crushers'],
   };
 
   @override
@@ -467,7 +477,7 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                             title: Text("${muscleEntry.key} PRs", style: const TextStyle(fontWeight: FontWeight.bold)),
                             children: muscleEntry.value.entries.map((exEntry) {
                               return ListTile(
-                                title: Text(exEntry.key),
+                                title: Text(exEntry.key, overflow: TextOverflow.ellipsis),
                                 trailing: Text("${exEntry.value} kg", style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 16)),
                               );
                             }).toList(),
@@ -566,7 +576,6 @@ class _WarmupRoutinesScreenState extends State<WarmupRoutinesScreen> {
           ),
           const SizedBox(height: 20),
 
-          // BEFORE WORKOUT CARD
           Card(
             color: const Color(0xFF1E1E1E),
             child: Padding(
@@ -598,7 +607,6 @@ class _WarmupRoutinesScreenState extends State<WarmupRoutinesScreen> {
           ),
           const SizedBox(height: 15),
 
-          // AFTER WORKOUT CARD
           Card(
             color: const Color(0xFF1E1E1E),
             child: Padding(
@@ -697,7 +705,7 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
 
       dailyTracker.logCardioSession(_cardioType, duration, dist, cals);
 
-      // FIX: Guard BuildContext across async gap
+      // Async context guard to eliminate linter warning
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -712,7 +720,6 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
       double fallbackDist = (speed * (duration / 60.0));
       dailyTracker.logCardioSession(_cardioType, duration, fallbackDist, fallbackCals);
 
-      // FIX: Guard BuildContext across async gap
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
