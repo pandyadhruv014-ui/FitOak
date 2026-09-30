@@ -5,27 +5,49 @@ from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from passlib.context import CryptContext
 from google import genai
 from dotenv import load_dotenv
 
-# IMPORTS MUST BE IN THIS EXACT ORDER
 import database
-import models  # <--- Registers User, Meal, Workout models onto Base.metadata
-from database import engine, get_db, Base
+import models
+from database import engine, get_db
 
 load_dotenv()
 
-# --- Force Table Creation on Startup ---
+# --- Force SQL Table Creation ---
+def create_tables_directly():
+    create_users_table_sql = """
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR NOT NULL,
+        email VARCHAR UNIQUE NOT NULL,
+        password VARCHAR NOT NULL,
+        age INTEGER DEFAULT 0,
+        gender VARCHAR DEFAULT '',
+        goal VARCHAR DEFAULT '',
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
+    CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
+    """
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(create_users_table_sql))
+        print("Explicit SQL: Created 'users' table successfully.")
+    except Exception as e:
+        print(f"Explicit SQL execution error: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Execute direct SQL table creation on boot
+    create_tables_directly()
     try:
-        # Import models inside lifespan to ensure they register on Base
-        import models
-        Base.metadata.create_all(bind=engine)
-        print("Successfully created all database tables!")
+        models.Base.metadata.create_all(bind=engine)
     except Exception as e:
-        print(f"Database initialization error: {e}")
+        print(f"ORM metadata initialization error: {e}")
     yield
 
 app = FastAPI(title="FitOak Backend", lifespan=lifespan)
@@ -39,7 +61,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Security / Password Hashing ---
+# --- Security & Hashing ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # --- Gemini AI Client Setup ---
@@ -71,8 +93,8 @@ def read_root():
 
 @app.post("/api/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
-    # Ensure tables exist right before querying
-    Base.metadata.create_all(bind=engine)
+    # Safety fallback to verify table exists right before query
+    create_tables_directly()
     
     existing_user = db.query(models.User).filter(models.User.email == user.email).first()
     if existing_user:
@@ -103,7 +125,7 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
 
 @app.post("/api/login")
 def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
-    Base.metadata.create_all(bind=engine)
+    create_tables_directly()
     
     user = db.query(models.User).filter(models.User.email == credentials.email).first()
     
