@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SetLog {
@@ -18,6 +20,8 @@ class SetLog {
 }
 
 class DailyTrackerState extends ChangeNotifier {
+  final String backendUrl = "https://backend-um5a.onrender.com";
+
   // --- Auth & Session State ---
   bool isLoggedIn = false;
   int userId = 0;
@@ -107,16 +111,21 @@ class DailyTrackerState extends ChangeNotifier {
     checkSavedSession();
   }
 
-  // --- Session Management Methods (Required by main, auth, account screens) ---
+  // --- Session Management Methods ---
   Future<void> checkSavedSession() async {
     final prefs = await SharedPreferences.getInstance();
     isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-    userId = prefs.getInt('userId') ?? 0;
+    userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? 0;
     fullName = prefs.getString('userName') ?? fullName;
     email = prefs.getString('userEmail') ?? email;
     dob = prefs.getString('dob') ?? dob;
     heightCm = prefs.getDouble('heightCm') ?? heightCm;
     weightKg = prefs.getDouble('weightKg') ?? weightKg;
+
+    if (userId > 0) {
+      await fetchBackendMeals();
+      await fetchBackendWorkouts();
+    }
     notifyListeners();
   }
 
@@ -131,6 +140,7 @@ class DailyTrackerState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isLoggedIn', true);
     await prefs.setInt('userId', id);
+    await prefs.setInt('user_id', id);
     await prefs.setString('userName', name);
     await prefs.setString('userEmail', userEmail);
     await prefs.setString('dob', dobVal);
@@ -144,6 +154,9 @@ class DailyTrackerState extends ChangeNotifier {
     if (dobVal.isNotEmpty) dob = dobVal;
     if (height > 0) heightCm = height;
     if (weight > 0) weightKg = weight;
+
+    await fetchBackendMeals();
+    await fetchBackendWorkouts();
     notifyListeners();
   }
 
@@ -229,7 +242,7 @@ class DailyTrackerState extends ChangeNotifier {
     required String muscle,
     required String exerciseName,
     required List<SetLog> sets,
-  }) {
+  }) async {
     double maxWeight = 0;
     for (var s in sets) {
       if (s.weight > maxWeight) maxWeight = s.weight;
@@ -248,10 +261,29 @@ class DailyTrackerState extends ChangeNotifier {
       'caloriesBurned': estimatedBurn,
     });
     notifyListeners();
+
+    if (userId > 0) {
+      try {
+        await http.post(
+          Uri.parse('$backendUrl/api/workouts'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'user_id': userId,
+            'workout_type': 'Strength',
+            'muscle': muscle,
+            'exercise': exerciseName,
+            'sets_count': sets.length,
+            'max_weight': maxWeight,
+          }),
+        );
+      } catch (e) {
+        debugPrint("Error syncing workout: $e");
+      }
+    }
   }
 
   void logCardioSession(
-      String type, int durationMins, double distance, int calories) {
+      String type, int durationMins, double distance, int calories) async {
     totalCaloriesBurned += calories;
     distanceKm += distance;
     workoutLog.add({
@@ -263,6 +295,25 @@ class DailyTrackerState extends ChangeNotifier {
       'details': '$durationMins mins | ${distance.toStringAsFixed(2)} km',
     });
     notifyListeners();
+
+    if (userId > 0) {
+      try {
+        await http.post(
+          Uri.parse('$backendUrl/api/workouts'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'user_id': userId,
+            'workout_type': 'Cardio',
+            'muscle': 'Cardio',
+            'exercise': type,
+            'duration_mins': durationMins,
+            'speed_kmh': durationMins > 0 ? (distance / (durationMins / 60.0)) : 0.0,
+          }),
+        );
+      } catch (e) {
+        debugPrint("Error syncing cardio: $e");
+      }
+    }
   }
 
   void syncDeviceHealthData(
@@ -275,7 +326,54 @@ class DailyTrackerState extends ChangeNotifier {
   }
 
   Future<void> fetchBackendMeals() async {
-    notifyListeners();
+    if (userId <= 0) return;
+    try {
+      final res = await http.get(Uri.parse('$backendUrl/api/meals/$userId'));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final List meals = data['meals'] ?? [];
+
+        todayLog = meals.map<Map<String, dynamic>>((m) {
+          return {
+            'name': m['name'] ?? 'Meal',
+            'quantity': m['quantity'] ?? '',
+            'calories': (m['calories'] ?? 0) as int,
+            'protein': (m['protein'] ?? 0.0).toInt(),
+            'carbs': (m['carbs'] ?? 0.0).toInt(),
+            'fat': (m['fat'] ?? 0.0).toInt(),
+          };
+        }).toList();
+
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error fetching backend meals: $e");
+    }
+  }
+
+  Future<void> fetchBackendWorkouts() async {
+    if (userId <= 0) return;
+    try {
+      final res = await http.get(Uri.parse('$backendUrl/api/workouts/$userId'));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final List workouts = data['workouts'] ?? [];
+
+        workoutLog = workouts.map<Map<String, dynamic>>((w) {
+          return {
+            'muscle': w['muscle'] ?? 'General',
+            'exercise': w['exercise'] ?? 'Exercise',
+            'sets': <SetLog>[],
+            'maxWeight': (w['max_weight'] ?? 0.0).toDouble(),
+            'caloriesBurned': w['calories_burned'] ?? 100,
+          };
+        }).toList();
+
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error fetching backend workouts: $e");
+    }
   }
 
   Future<void> logoutUser() async {

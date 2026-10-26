@@ -74,12 +74,12 @@ class WorkoutHubScreen extends StatelessWidget {
           ),
           _buildHubCard(
             context,
-            title: 'Warmup Routines',
-            subtitle: 'Before and after workout warmups categorized by muscle group',
+            title: 'Warmup/Stretching',
+            subtitle: 'Before and after workout warmups & stretching routines',
             icon: Icons.self_improvement,
             color: Colors.purple,
             destination: const ScaffoldPageWrapper(
-              title: 'Warmup Routines',
+              title: 'Warmup/Stretching',
               child: WarmupRoutinesScreen(),
             ),
           ),
@@ -150,7 +150,7 @@ class ScaffoldPageWrapper extends StatelessWidget {
 }
 
 // ==========================================
-// UPDATED STRENGTH TRAINING SECTION
+// STRENGTH TRAINING SECTION
 // ==========================================
 class StrengthMuscleSelectorScreen extends StatefulWidget {
   const StrengthMuscleSelectorScreen({super.key});
@@ -241,7 +241,6 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
           const Text("Choose Muscle Category", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
 
-          // Visual Category Grid
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -381,7 +380,7 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
 }
 
 // ==========================================
-// HIGHEST PR RECORDS (WITH OVERFLOW FIX)
+// HIGHEST PR RECORDS (RESPONSIVE DROPDOWNS FIX)
 // ==========================================
 class PersonalRecordsScreen extends StatefulWidget {
   const PersonalRecordsScreen({super.key});
@@ -441,13 +440,20 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
+                      // Fixed 84-pixel overflow by wrapping each Dropdown in Expanded + Flex
                       Row(
                         children: [
                           Expanded(
+                            flex: 1,
                             child: DropdownButtonFormField<String>(
                               initialValue: _selectedMuscle,
-                              decoration: const InputDecoration(labelText: 'Muscle', border: OutlineInputBorder()),
-                              items: _exercises.keys.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                              isExpanded: true, // Prevents text overflow inside dropdown
+                              decoration: const InputDecoration(
+                                labelText: 'Muscle',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                              ),
+                              items: _exercises.keys.map((m) => DropdownMenuItem(value: m, child: Text(m, overflow: TextOverflow.ellipsis))).toList(),
                               onChanged: (val) {
                                 if (val != null) {
                                   setState(() {
@@ -458,12 +464,18 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                               },
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           Expanded(
+                            flex: 1,
                             child: DropdownButtonFormField<String>(
                               initialValue: _selectedExercise,
-                              decoration: const InputDecoration(labelText: 'Exercise', border: OutlineInputBorder()),
-                              items: (_exercises[_selectedMuscle] ?? []).map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                              isExpanded: true, // Prevents text overflow inside dropdown
+                              decoration: const InputDecoration(
+                                labelText: 'Exercise',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                              ),
+                              items: (_exercises[_selectedMuscle] ?? []).map((e) => DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis))).toList(),
                               onChanged: (val) {
                                 if (val != null) setState(() => _selectedExercise = val);
                               },
@@ -541,7 +553,7 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
 }
 
 // ==========================================
-// WARMUP ROUTINES (BY MUSCLE GROUP)
+// WARMUP/STRETCHING (RENAMED SECTION)
 // ==========================================
 class WarmupRoutinesScreen extends StatefulWidget {
   const WarmupRoutinesScreen({super.key});

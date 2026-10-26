@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../state/daily_tracker_state.dart';
 
 class DietScreen extends StatefulWidget {
   const DietScreen({super.key});
@@ -38,29 +39,31 @@ class _DietScreenState extends State<DietScreen> {
     setState(() => isLoading = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? 0;
+      final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
 
-      final res = await http.get(Uri.parse('$backendUrl/api/meals/$userId'));
-      if (res.statusCode == 200) {
-        final data = json.decode(res.body);
-        final fetchedMeals = data['meals'] ?? [];
+      if (userId > 0) {
+        final res = await http.get(Uri.parse('$backendUrl/api/meals/$userId'));
+        if (res.statusCode == 200) {
+          final data = json.decode(res.body);
+          final fetchedMeals = data['meals'] ?? [];
 
-        double cals = 0, p = 0, c = 0, f = 0;
-        for (var meal in fetchedMeals) {
-          cals += (meal['calories'] ?? 0).toDouble();
-          p += (meal['protein'] ?? 0).toDouble();
-          c += (meal['carbs'] ?? 0).toDouble();
-          f += (meal['fat'] ?? 0).toDouble();
-        }
+          double cals = 0, p = 0, c = 0, f = 0;
+          for (var meal in fetchedMeals) {
+            cals += (meal['calories'] ?? 0).toDouble();
+            p += (meal['protein'] ?? 0).toDouble();
+            c += (meal['carbs'] ?? 0).toDouble();
+            f += (meal['fat'] ?? 0).toDouble();
+          }
 
-        if (mounted) {
-          setState(() {
-            meals = fetchedMeals.reversed.toList(); // Newest first
-            totalCalories = cals;
-            totalProtein = p;
-            totalCarbs = c;
-            totalFat = f;
-          });
+          if (mounted) {
+            setState(() {
+              meals = fetchedMeals.reversed.toList(); // Newest first
+              totalCalories = cals;
+              totalProtein = p;
+              totalCarbs = c;
+              totalFat = f;
+            });
+          }
         }
       }
     } catch (e) {
@@ -163,7 +166,7 @@ class _DietScreenState extends State<DietScreen> {
 
                           try {
                             final prefs = await SharedPreferences.getInstance();
-                            final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? 0;
+                            final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
 
                             // 1. Fetch AI Nutrients
                             final aiRes = await http.post(
@@ -179,25 +182,29 @@ class _DietScreenState extends State<DietScreen> {
                               final aiData = json.decode(aiRes.body)['data'];
 
                               // 2. Persist Meal to PostgreSQL
-                              await http.post(
-                                Uri.parse('$backendUrl/api/meals'),
-                                headers: {'Content-Type': 'application/json'},
-                                body: json.encode({
-                                  'user_id': userId,
-                                  'name': aiData['meal_name'] ?? dishController.text.trim(),
-                                  'quantity': quantityController.text.trim(),
-                                  'calories': (aiData['calories'] ?? 0).toInt(),
-                                  'protein': (aiData['protein_g'] ?? 0.0).toDouble(),
-                                  'carbs': (aiData['carbs_g'] ?? 0.0).toDouble(),
-                                  'fat': (aiData['fat_g'] ?? 0.0).toDouble(),
-                                }),
-                              );
+                              if (userId > 0) {
+                                await http.post(
+                                  Uri.parse('$backendUrl/api/meals'),
+                                  headers: {'Content-Type': 'application/json'},
+                                  body: json.encode({
+                                    'user_id': userId,
+                                    'name': aiData['meal_name'] ?? dishController.text.trim(),
+                                    'quantity': quantityController.text.trim(),
+                                    'calories': (aiData['calories'] ?? 0).toInt(),
+                                    'protein': (aiData['protein_g'] ?? 0.0).toDouble(),
+                                    'carbs': (aiData['carbs_g'] ?? 0.0).toDouble(),
+                                    'fat': (aiData['fat_g'] ?? 0.0).toDouble(),
+                                  }),
+                                );
+                              }
+
+                              dailyTracker.fetchBackendMeals();
 
                               if (!dialogContext.mounted) return;
                               Navigator.pop(dialogContext);
 
                               if (!mounted) return;
-                              _fetchUserMeals(); // Refresh feed and macro bars
+                              _fetchUserMeals();
 
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -256,7 +263,6 @@ class _DietScreenState extends State<DietScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16.0),
                 children: [
-                  // --- Daily Macro Progress Overview ---
                   Card(
                     color: const Color(0xFF1E1E1E),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -301,7 +307,6 @@ class _DietScreenState extends State<DietScreen> {
 
                   const SizedBox(height: 24),
 
-                  // --- Logged Meals List ---
                   const Text(
                     "Today's Meals",
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),

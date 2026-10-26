@@ -110,23 +110,48 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 25),
 
-              // SECTION 2: WEEKLY / MONTHLY PROGRESS OVERVIEW
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // SECTION 2: WEEKLY / MONTHLY PROGRESS OVERVIEW (WRAPPED HEADER FIXES 113px OVERFLOW)
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8.0,
+                runSpacing: 8.0,
                 children: [
                   Text(
                     showMonthlyView ? "Monthly Calorie Overview" : "2. Weekly Progress Overview",
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: false, label: Text("Weekly")),
-                      ButtonSegment(value: true, label: Text("Monthly")),
-                    ],
-                    selected: {showMonthlyView},
-                    onSelectionChanged: (set) {
-                      setState(() => showMonthlyView = set.first);
-                    },
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.deepOrange.withValues(alpha: 0.5)),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ChoiceChip(
+                          label: const Text("Weekly", style: TextStyle(fontSize: 11)),
+                          selected: !showMonthlyView,
+                          selectedColor: Colors.deepOrange,
+                          visualDensity: VisualDensity.compact,
+                          onSelected: (selected) {
+                            if (selected) setState(() => showMonthlyView = false);
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                        ChoiceChip(
+                          label: const Text("Monthly", style: TextStyle(fontSize: 11)),
+                          selected: showMonthlyView,
+                          selectedColor: Colors.deepOrange,
+                          visualDensity: VisualDensity.compact,
+                          onSelected: (selected) {
+                            if (selected) setState(() => showMonthlyView = true);
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
