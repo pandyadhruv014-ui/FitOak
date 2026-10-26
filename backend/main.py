@@ -238,29 +238,34 @@ def get_user_profile(user_id: int, db: Session = Depends(get_db)):
         "goal": user.goal
     }
 
-# --- Gemini AI Dynamic Nutrition Analyzer Endpoint ---
+# --- Dynamic Gemini AI Nutrition Endpoint (No Hardcoded Fallbacks) ---
 @app.post("/api/ai/nutrition")
 def analyze_nutrition(request: NutritionRequest):
     if not gemini_client:
         raise HTTPException(
             status_code=500,
-            detail="GEMINI_API_KEY environment variable is missing on Render."
+            detail="GEMINI_API_KEY environment variable is not configured on Render server."
         )
     
     prompt = f"""
-    You are an expert nutritionist. Perform an exact nutrient calculation for:
-    Food Item: "{request.dish_name}"
-    Exact Portion/Quantity: "{request.quantity}"
+    You are an accurate nutritional database engine.
+    Calculate dynamic macros for:
+    Food Dish: "{request.dish_name}"
+    Portion/Quantity: "{request.quantity}"
 
-    Calculate the dynamic nutrition for this specific portion size (e.g., 500g paneer has ~1325 kcal & 90g protein, while 300g sprouts has ~90 kcal & 9g protein).
+    Calculate exact nutrients for this portion.
+    Examples:
+    - 5 piece eggs -> ~350 kcal, 30g protein, 2g carbs, 25g fat
+    - 300g sprouts -> ~90 kcal, 9g protein, 18g carbs, 1g fat
+    - 500g paneer -> ~1325 kcal, 90g protein, 30g carbs, 95g fat
 
-    Return ONLY a valid raw JSON object matching this structure (no markdown formatting codeblocks):
+    Return ONLY a raw JSON string (no markdown formatting, no ```json codeblocks):
     {{
       "meal_name": "{request.dish_name}",
-      "calories": 0,
-      "protein_g": 0.0,
-      "carbs_g": 0.0,
-      "fat_g": 0.0
+      "calories": 350,
+      "protein_g": 30.0,
+      "carbs_g": 2.0,
+      "fat_g": 25.0
     }}
     """
     
@@ -270,14 +275,13 @@ def analyze_nutrition(request: NutritionRequest):
             contents=prompt,
         )
         
-        clean_json_str = response.text.replace("```json", "").replace("```", "").strip()
-        data = json.loads(clean_json_str)
-        
+        raw_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        data = json.loads(raw_text)
         return {"status": "success", "data": data}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI Nutrition calculation error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gemini AI calculation failed: {str(e)}")
 
-# --- Workouts & Meals Persistent Storage API ---
+# --- PostgreSQL Database Sync Endpoints ---
 @app.post("/api/workouts")
 def create_workout(workout: WorkoutCreate, db: Session = Depends(get_db)):
     calories = 0

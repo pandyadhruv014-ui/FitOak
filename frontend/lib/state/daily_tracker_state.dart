@@ -111,6 +111,52 @@ class DailyTrackerState extends ChangeNotifier {
     checkSavedSession();
   }
 
+  // --- Theme Toggle Method ---
+  void toggleTheme(bool val) {
+    isDarkMode = val;
+    notifyListeners();
+  }
+
+  // --- Health Sensors Sync Method ---
+  void syncDeviceHealthData({
+    required int steps,
+    required double distance,
+    required int burnedCals,
+  }) {
+    isHealthPermissionGranted = true;
+    dailySteps += steps;
+    distanceKm += distance;
+    totalCaloriesBurned += burnedCals;
+    notifyListeners();
+  }
+
+  // --- Log Meal Method ---
+  void logUserMeal({
+    required String day,
+    required String mealCategory,
+    required String foodName,
+    required int calories,
+    required int protein,
+    required int carbs,
+    required int fat,
+  }) {
+    final mealEntry = {
+      'category': mealCategory,
+      'name': foodName,
+      'calories': calories,
+      'protein': protein,
+      'carbs': carbs,
+      'fat': fat,
+    };
+
+    if (weeklyUserDietLog.containsKey(day)) {
+      weeklyUserDietLog[day]!.add(mealEntry);
+    }
+
+    todayLog.add(mealEntry);
+    notifyListeners();
+  }
+
   // --- Session Management Methods ---
   Future<void> checkSavedSession() async {
     final prefs = await SharedPreferences.getInstance();
@@ -166,70 +212,6 @@ class DailyTrackerState extends ChangeNotifier {
     await flutterLocalNotificationsPlugin.initialize(initSettings);
   }
 
-  Future<void> checkAndSendDinnerReminder() async {
-    if (todayLog.isEmpty) {
-      const androidDetails = AndroidNotificationDetails(
-        'fitoak_reminder',
-        'Diet Reminders',
-        channelDescription: 'Reminds user to log today\'s meals after dinner',
-        importance: Importance.high,
-        priority: Priority.high,
-      );
-      const notificationDetails = NotificationDetails(android: androidDetails);
-      await flutterLocalNotificationsPlugin.show(
-        0,
-        'FitOak Meal Logger Reminder 🍽️',
-        'You haven\'t logged your meals for today yet! Tap to log your diet before bed.',
-        notificationDetails,
-      );
-      debugPrint("Triggered post-dinner missing diet log notification.");
-    }
-  }
-
-  void toggleTheme(bool val) {
-    isDarkMode = val;
-    notifyListeners();
-  }
-
-  void addWaterGlass() {
-    waterGlasses++;
-    notifyListeners();
-  }
-
-  void removeWaterGlass() {
-    if (waterGlasses > 0) {
-      waterGlasses--;
-      notifyListeners();
-    }
-  }
-
-  // Logs meal directly into Today's Dashboard & Weekly Log
-  void logUserMeal({
-    required String day,
-    required String mealCategory,
-    required String foodName,
-    required int calories,
-    required int protein,
-    required int carbs,
-    required int fat,
-  }) {
-    final mealEntry = {
-      'category': mealCategory,
-      'name': foodName,
-      'calories': calories,
-      'protein': protein,
-      'carbs': carbs,
-      'fat': fat,
-    };
-
-    if (weeklyUserDietLog.containsKey(day)) {
-      weeklyUserDietLog[day]!.add(mealEntry);
-    }
-
-    todayLog.add(mealEntry);
-    notifyListeners();
-  }
-
   void updateOrAddPR(String muscle, String exercise, double weight) {
     if (!personalRecords.containsKey(muscle)) {
       personalRecords[muscle] = {};
@@ -238,6 +220,7 @@ class DailyTrackerState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- Log Exercise & Sync to PostgreSQL ---
   void logExerciseWithSets({
     required String muscle,
     required String exerciseName,
@@ -277,7 +260,7 @@ class DailyTrackerState extends ChangeNotifier {
           }),
         );
       } catch (e) {
-        debugPrint("Error syncing workout: $e");
+        debugPrint("Error syncing workout to database: $e");
       }
     }
   }
@@ -311,20 +294,12 @@ class DailyTrackerState extends ChangeNotifier {
           }),
         );
       } catch (e) {
-        debugPrint("Error syncing cardio: $e");
+        debugPrint("Error syncing cardio to database: $e");
       }
     }
   }
 
-  void syncDeviceHealthData(
-      {required int steps, required double distance, required int burnedCals}) {
-    isHealthPermissionGranted = true;
-    dailySteps += steps;
-    distanceKm += distance;
-    totalCaloriesBurned += burnedCals;
-    notifyListeners();
-  }
-
+  // --- Retrieve Meals from PostgreSQL ---
   Future<void> fetchBackendMeals() async {
     if (userId <= 0) return;
     try {
@@ -351,6 +326,7 @@ class DailyTrackerState extends ChangeNotifier {
     }
   }
 
+  // --- Retrieve Workouts from PostgreSQL & Reconstruct SetLog Objects ---
   Future<void> fetchBackendWorkouts() async {
     if (userId <= 0) return;
     try {
@@ -360,11 +336,19 @@ class DailyTrackerState extends ChangeNotifier {
         final List workouts = data['workouts'] ?? [];
 
         workoutLog = workouts.map<Map<String, dynamic>>((w) {
+          int count = w['sets_count'] ?? 1;
+          double weight = (w['max_weight'] ?? 0.0).toDouble();
+
+          List<SetLog> reconstructedSets = List.generate(
+            count,
+            (i) => SetLog(setNumber: i + 1, reps: 10, weight: weight),
+          );
+
           return {
             'muscle': w['muscle'] ?? 'General',
             'exercise': w['exercise'] ?? 'Exercise',
-            'sets': <SetLog>[],
-            'maxWeight': (w['max_weight'] ?? 0.0).toDouble(),
+            'sets': reconstructedSets,
+            'maxWeight': weight,
             'caloriesBurned': w['calories_burned'] ?? 100,
           };
         }).toList();
