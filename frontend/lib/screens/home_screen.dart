@@ -9,12 +9,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  bool showMonthlyView = false;
+  double waterLiters = 1.25;
+  final double waterGoalLiters = 3.5;
+
   @override
-void initState() {
-  super.initState();
-  dailyTracker.addListener(_updateUi);
-  dailyTracker.fetchBackendMeals(); // Pulls saved meals from SQLite on load
-}
+  void initState() {
+    super.initState();
+    dailyTracker.addListener(_updateUi);
+    dailyTracker.fetchBackendMeals();
+  }
 
   @override
   void dispose() {
@@ -26,25 +30,34 @@ void initState() {
     if (mounted) setState(() {});
   }
 
+  void _updateWater(double delta) {
+    setState(() {
+      waterLiters = (waterLiters + delta).clamp(0.0, 10.0);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final netCalories = (dailyTracker.totalCalories - dailyTracker.totalCaloriesBurned).clamp(0, 10000);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('FitOak Dashboard')),
+      appBar: AppBar(title: Text("Welcome, ${dailyTracker.fullName} 👋")),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // SECTION 1: TODAY'S PROGRESS
+              // SECTION 1: TODAY'S PROGRESS & SENSORS
               const Text("1. Today's Progress", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
 
               Card(
                 color: const Color(0xFF1E1E1E),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.deepOrange.withAlpha(120))),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.deepOrange.withValues(alpha: 0.5)),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -97,8 +110,26 @@ void initState() {
               ),
               const SizedBox(height: 25),
 
-              // SECTION 2: WEEKLY PROGRESS OVERVIEW (GRAPHICAL FORMAT)
-              const Text("2. Weekly Progress Overview", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              // SECTION 2: WEEKLY / MONTHLY PROGRESS OVERVIEW
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    showMonthlyView ? "Monthly Calorie Overview" : "2. Weekly Progress Overview",
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, label: Text("Weekly")),
+                      ButtonSegment(value: true, label: Text("Monthly")),
+                    ],
+                    selected: {showMonthlyView},
+                    onSelectionChanged: (set) {
+                      setState(() => showMonthlyView = set.first);
+                    },
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
 
               Card(
@@ -108,42 +139,31 @@ void initState() {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("Calories Consumed vs. Burned (Mon - Sun)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text(
+                        showMonthlyView ? "Calories Consumed vs. Burned (Weeks 1 - 4)" : "Calories Consumed vs. Burned (Mon - Sun)",
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
                       const SizedBox(height: 15),
 
-                      // Custom Graphical Bar Chart
                       SizedBox(
                         height: 150,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           crossAxisAlignment: CrossAxisAlignment.end,
-                          children: dailyTracker.weeklyProgressData.map((data) {
-                            double consumedHeight = (data['consumed'] / 3000.0) * 120.0;
-                            double burnedHeight = (data['burned'] / 1000.0) * 120.0;
-
-                            return Column(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: consumedHeight.clamp(10, 120),
-                                      decoration: BoxDecoration(color: Colors.deepOrange, borderRadius: BorderRadius.circular(4)),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Container(
-                                      width: 8,
-                                      height: burnedHeight.clamp(10, 120),
-                                      decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(4)),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(data['day'], style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                              ],
-                            );
-                          }).toList(),
+                          children: showMonthlyView
+                              ? [
+                                  _buildBar("W1", 14500, 3200),
+                                  _buildBar("W2", 15200, 3500),
+                                  _buildBar("W3", 13800, 3100),
+                                  _buildBar("W4", 16000, 3800),
+                                ]
+                              : dailyTracker.weeklyProgressData.map((data) {
+                                  return _buildBar(
+                                    data['day'],
+                                    (data['consumed'] as num).toInt(),
+                                    (data['burned'] as num).toInt(),
+                                  );
+                                }).toList(),
                         ),
                       ),
                       const SizedBox(height: 15),
@@ -165,6 +185,52 @@ void initState() {
               ),
               const SizedBox(height: 25),
 
+              // SECTION 3: HYDRATION TRACKER
+              const Text("Hydration Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Card(
+                color: const Color(0xFF1E1E1E),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("Water Consumption", style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text("${waterLiters.toStringAsFixed(2)} / $waterGoalLiters L", style: const TextStyle(color: Colors.blue)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      LinearProgressIndicator(
+                        value: (waterLiters / waterGoalLiters).clamp(0.0, 1.0),
+                        backgroundColor: Colors.blue.withValues(alpha: 0.2),
+                        color: Colors.blue,
+                        minHeight: 10,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () => _updateWater(0.25),
+                            icon: const Icon(Icons.add),
+                            label: const Text("+250 ml"),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () => _updateWater(0.50),
+                            icon: const Icon(Icons.add),
+                            label: const Text("+500 ml"),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 25),
+
+              // SECTION 4: TODAY'S COMPLETED EXERCISES
               const Text("Today's Completed Exercises", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
 
@@ -198,6 +264,34 @@ void initState() {
     );
   }
 
+  Widget _buildBar(String label, int consumed, int burned) {
+    double consumedHeight = (consumed / 3000.0) * 100.0;
+    double burnedHeight = (burned / 1000.0) * 100.0;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 8,
+              height: consumedHeight.clamp(10, 100),
+              decoration: BoxDecoration(color: Colors.deepOrange, borderRadius: BorderRadius.circular(4)),
+            ),
+            const SizedBox(width: 3),
+            Container(
+              width: 8,
+              height: burnedHeight.clamp(10, 100),
+              decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(4)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      ],
+    );
+  }
+
   Widget _activityMetric(String label, String value, String subtext) {
     return Column(
       children: [
@@ -215,7 +309,7 @@ void initState() {
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withAlpha(100), width: 1.5),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -5,7 +5,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.8.0
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -13,8 +13,9 @@ dependencies:
   http: ^1.2.0
   sensors_plus: ^6.0.0
   flutter_local_notifications: ^17.0.0
-  shared_preferences: ^2.2.2
+  shared_preferences: 2.2.2
   permission_handler: ^11.3.1
+  health: ^11.0.0
 
 dev_dependencies:
   flutter_test:
@@ -25,9 +26,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  assets:
-    - assets/app_icon.png
-    - assets/splash_background.png
 
 flutter_launcher_icons:
   android: true

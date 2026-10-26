@@ -150,7 +150,7 @@ class ScaffoldPageWrapper extends StatelessWidget {
 }
 
 // ==========================================
-// EXPANDED STRENGTH TRAINING SECTION
+// UPDATED STRENGTH TRAINING SECTION
 // ==========================================
 class StrengthMuscleSelectorScreen extends StatefulWidget {
   const StrengthMuscleSelectorScreen({super.key});
@@ -170,7 +170,7 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
     'Abs': ['Cable Crunches', 'Hanging Leg Raises', 'Plank Holds', 'Russian Twists'],
   };
 
-  String? selectedMuscle;
+  String? selectedMuscle = 'Chest';
   String? selectedExercise;
 
   List<SetLog> currentSets = [
@@ -178,6 +178,12 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
     SetLog(setNumber: 2, reps: 10, weight: 25.0),
     SetLog(setNumber: 3, reps: 8, weight: 30.0),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    selectedExercise = muscleExerciseMap['Chest']!.first;
+  }
 
   void _addSet() {
     setState(() {
@@ -218,7 +224,6 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
     );
 
     setState(() {
-      selectedExercise = null;
       currentSets = [
         SetLog(setNumber: 1, reps: 12, weight: 20.0),
         SetLog(setNumber: 2, reps: 10, weight: 25.0),
@@ -233,26 +238,54 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Select Target Muscle Group", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
+          const Text("Choose Muscle Category", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
 
-          Wrap(
-            spacing: 8.0,
-            runSpacing: 4.0,
-            children: muscleExerciseMap.keys.map((muscle) {
+          // Visual Category Grid
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 1.1,
+            ),
+            itemCount: muscleExerciseMap.keys.length,
+            itemBuilder: (context, index) {
+              final muscle = muscleExerciseMap.keys.elementAt(index);
               final isSelected = selectedMuscle == muscle;
-              return ChoiceChip(
-                label: Text(muscle),
-                selected: isSelected,
-                selectedColor: Colors.deepOrange,
-                onSelected: (selected) {
+              return InkWell(
+                onTap: () {
                   setState(() {
-                    selectedMuscle = selected ? muscle : null;
-                    selectedExercise = null;
+                    selectedMuscle = muscle;
+                    selectedExercise = muscleExerciseMap[muscle]!.first;
                   });
                 },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.deepOrange : const Color(0xFF1E1E1E),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.deepOrange.withValues(alpha: 0.5)),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.fitness_center, color: isSelected ? Colors.white : Colors.deepOrange),
+                      const SizedBox(height: 6),
+                      Text(
+                        muscle,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               );
-            }).toList(),
+            },
           ),
           const SizedBox(height: 20),
 
@@ -348,7 +381,7 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
 }
 
 // ==========================================
-// HIGHEST PR RECORDS (USER INPUT ENABLED)
+// HIGHEST PR RECORDS (WITH OVERFLOW FIX)
 // ==========================================
 class PersonalRecordsScreen extends StatefulWidget {
   const PersonalRecordsScreen({super.key});
@@ -360,7 +393,7 @@ class PersonalRecordsScreen extends StatefulWidget {
 class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
   final TextEditingController _weightController = TextEditingController();
   String _selectedMuscle = 'Chest';
-  String _selectedExercise = 'Bench Press';
+  String _selectedExercise = 'Incline Dumbbell Press';
 
   final Map<String, List<String>> _exercises = {
     'Chest': ['Incline Dumbbell Press', 'Pec Dec Flyes', 'Cable Chest Flyes', 'Bench Press'],
@@ -477,8 +510,22 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                             title: Text("${muscleEntry.key} PRs", style: const TextStyle(fontWeight: FontWeight.bold)),
                             children: muscleEntry.value.entries.map((exEntry) {
                               return ListTile(
-                                title: Text(exEntry.key, overflow: TextOverflow.ellipsis),
-                                trailing: Text("${exEntry.value} kg", style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 16)),
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        exEntry.key,
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "${exEntry.value} kg",
+                                      style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 16),
+                                    ),
+                                  ],
+                                ),
                               );
                             }).toList(),
                           ),
@@ -705,7 +752,6 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
 
       dailyTracker.logCardioSession(_cardioType, duration, dist, cals);
 
-      // Async context guard to eliminate linter warning
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
