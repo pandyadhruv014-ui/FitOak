@@ -92,7 +92,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FitOak Backend", lifespan=lifespan)
 
-# --- CORS Middleware ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -101,14 +100,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Password Hashing Setup ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# --- Gemini AI Client Setup ---
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 gemini_client = genai.Client(api_key=gemini_api_key) if gemini_api_key else None
 
-# --- Pydantic Data Models ---
 class UserRegister(BaseModel):
     name: str
     email: str
@@ -147,9 +143,6 @@ class MealCreate(BaseModel):
     protein: float
     carbs: float
     fat: float
-
-
-# --- API ENDPOINTS ---
 
 @app.get("/")
 def read_root():
@@ -245,33 +238,30 @@ def get_user_profile(user_id: int, db: Session = Depends(get_db)):
         "goal": user.goal
     }
 
-# --- Gemini AI Automated Nutrition Analyzer Endpoint ---
+# --- Gemini AI Dynamic Nutrition Analyzer Endpoint ---
 @app.post("/api/ai/nutrition")
 def analyze_nutrition(request: NutritionRequest):
     if not gemini_client:
-        # Fallback estimation if GEMINI_API_KEY is unset
-        return {
-            "status": "success",
-            "data": {
-                "meal_name": request.dish_name,
-                "calories": 280,
-                "protein_g": 12.0,
-                "carbs_g": 35.0,
-                "fat_g": 10.0
-            }
-        }
+        raise HTTPException(
+            status_code=500,
+            detail="GEMINI_API_KEY environment variable is missing on Render."
+        )
     
     prompt = f"""
-    Calculate precise nutrition for dish: "{request.dish_name}", portion: "{request.quantity}".
-    Return ONLY a valid raw JSON object matching this structure:
+    You are an expert nutritionist. Perform an exact nutrient calculation for:
+    Food Item: "{request.dish_name}"
+    Exact Portion/Quantity: "{request.quantity}"
+
+    Calculate the dynamic nutrition for this specific portion size (e.g., 500g paneer has ~1325 kcal & 90g protein, while 300g sprouts has ~90 kcal & 9g protein).
+
+    Return ONLY a valid raw JSON object matching this structure (no markdown formatting codeblocks):
     {{
       "meal_name": "{request.dish_name}",
-      "calories": 250,
-      "protein_g": 15.0,
-      "carbs_g": 30.0,
-      "fat_g": 8.0
+      "calories": 0,
+      "protein_g": 0.0,
+      "carbs_g": 0.0,
+      "fat_g": 0.0
     }}
-    Do NOT wrap response in markdown or formatting tags.
     """
     
     try:
@@ -280,25 +270,14 @@ def analyze_nutrition(request: NutritionRequest):
             contents=prompt,
         )
         
-        # Clean potential code blocks
         clean_json_str = response.text.replace("```json", "").replace("```", "").strip()
         data = json.loads(clean_json_str)
         
         return {"status": "success", "data": data}
     except Exception as e:
-        # Graceful fallback on API error
-        return {
-            "status": "success",
-            "data": {
-                "meal_name": request.dish_name,
-                "calories": 250,
-                "protein_g": 14.0,
-                "carbs_g": 32.0,
-                "fat_g": 8.0
-            }
-        }
+        raise HTTPException(status_code=500, detail=f"AI Nutrition calculation error: {str(e)}")
 
-# --- Workouts & Meals Logging API ---
+# --- Workouts & Meals Persistent Storage API ---
 @app.post("/api/workouts")
 def create_workout(workout: WorkoutCreate, db: Session = Depends(get_db)):
     calories = 0
@@ -306,7 +285,7 @@ def create_workout(workout: WorkoutCreate, db: Session = Depends(get_db)):
     
     if workout.workout_type == "Cardio":
         calories = int(workout.duration_mins * (workout.speed_kmh * 0.8 + 3.0))
-        fat_loss = round((calories / 7700.0) * 1000.0, 2)  # Grams of fat
+        fat_loss = round((calories / 7700.0) * 1000.0, 2)
     else:
         calories = workout.sets_count * 15
 

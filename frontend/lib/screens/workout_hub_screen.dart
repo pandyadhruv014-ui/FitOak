@@ -3,18 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../main.dart';
 import '../state/daily_tracker_state.dart';
-import 'diet_screen.dart';
 import 'trackers_screen.dart';
-
-// Alias for Diet Screen integration in Hub
-class DietTabScreen extends StatelessWidget {
-  const DietTabScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const DietScreen();
-  }
-}
 
 class WorkoutHubScreen extends StatelessWidget {
   const WorkoutHubScreen({super.key});
@@ -48,17 +37,6 @@ class WorkoutHubScreen extends StatelessWidget {
             destination: const ScaffoldPageWrapper(
               title: 'Highest PR Records',
               child: PersonalRecordsScreen(),
-            ),
-          ),
-          _buildHubCard(
-            context,
-            title: 'Diet & Meal Plan',
-            subtitle: 'Custom weekday diet planner and logged meals',
-            icon: Icons.restaurant,
-            color: Colors.green,
-            destination: const ScaffoldPageWrapper(
-              title: 'Diet & Meal Plan',
-              child: DietTabScreen(),
             ),
           ),
           _buildHubCard(
@@ -380,7 +358,7 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
 }
 
 // ==========================================
-// HIGHEST PR RECORDS (RESPONSIVE DROPDOWNS FIX)
+// HIGHEST PR RECORDS
 // ==========================================
 class PersonalRecordsScreen extends StatefulWidget {
   const PersonalRecordsScreen({super.key});
@@ -440,14 +418,13 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      // Fixed 84-pixel overflow by wrapping each Dropdown in Expanded + Flex
                       Row(
                         children: [
                           Expanded(
                             flex: 1,
                             child: DropdownButtonFormField<String>(
                               initialValue: _selectedMuscle,
-                              isExpanded: true, // Prevents text overflow inside dropdown
+                              isExpanded: true,
                               decoration: const InputDecoration(
                                 labelText: 'Muscle',
                                 border: OutlineInputBorder(),
@@ -469,7 +446,7 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                             flex: 1,
                             child: DropdownButtonFormField<String>(
                               initialValue: _selectedExercise,
-                              isExpanded: true, // Prevents text overflow inside dropdown
+                              isExpanded: true,
                               decoration: const InputDecoration(
                                 labelText: 'Exercise',
                                 border: OutlineInputBorder(),
@@ -553,7 +530,7 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
 }
 
 // ==========================================
-// WARMUP/STRETCHING (RENAMED SECTION)
+// WARMUP/STRETCHING
 // ==========================================
 class WarmupRoutinesScreen extends StatefulWidget {
   const WarmupRoutinesScreen({super.key});
