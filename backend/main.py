@@ -386,3 +386,21 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+
+@app.delete("/api/meals/{meal_id}")
+def delete_meal(meal_id: int, db: Session = Depends(get_db)):
+    meal = db.query(models.Meal).filter(models.Meal.id == meal_id).first()
+    if not meal:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    db.delete(meal)
+    db.commit()
+    return {"status": "success", "message": "Meal deleted successfully"}
+
+@app.delete("/api/workouts/{workout_id}")
+def delete_workout(workout_id: int, db: Session = Depends(get_db)):
+    workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    db.delete(workout)
+    db.commit()
+    return {"status": "success", "message": "Workout deleted successfully"}
