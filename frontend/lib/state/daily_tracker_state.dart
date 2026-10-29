@@ -68,6 +68,7 @@ class DailyTrackerState extends ChangeNotifier {
     'Sunday': [],
   };
 
+  // --- RESTORED: Weekly Progress Data Getter ---
   List<Map<String, dynamic>> get weeklyProgressData {
     List<String> days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     List<String> fullDays = [
@@ -109,7 +110,6 @@ class DailyTrackerState extends ChangeNotifier {
     checkSavedSession();
   }
 
-  // --- Hydration Glass Methods ---
   void addWaterGlass() {
     waterGlasses++;
     notifyListeners();
@@ -122,13 +122,12 @@ class DailyTrackerState extends ChangeNotifier {
     }
   }
 
-  // --- Theme Toggle Method ---
   void toggleTheme(bool val) {
     isDarkMode = val;
     notifyListeners();
   }
 
-  // --- Health Sensors Sync Method ---
+  // --- RESTORED: Health Sensors Sync Method ---
   void syncDeviceHealthData({
     required int steps,
     required double distance,
@@ -141,54 +140,7 @@ class DailyTrackerState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Log Meal Method (With Automatic PostgreSQL Database Sync) ---
-  Future<void> logUserMeal({
-    required String day,
-    required String mealCategory,
-    required String foodName,
-    required int calories,
-    required int protein,
-    required int carbs,
-    required int fat,
-  }) async {
-    final mealEntry = {
-      'category': mealCategory,
-      'name': foodName,
-      'calories': calories,
-      'protein': protein,
-      'carbs': carbs,
-      'fat': fat,
-    };
-
-    if (weeklyUserDietLog.containsKey(day)) {
-      weeklyUserDietLog[day]!.add(mealEntry);
-    }
-
-    todayLog.add(mealEntry);
-    notifyListeners();
-
-    if (userId > 0) {
-      try {
-        await http.post(
-          Uri.parse('$backendUrl/api/meals'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'user_id': userId,
-            'name': "$mealCategory - $foodName",
-            'quantity': '1 portion',
-            'calories': calories,
-            'protein': protein.toDouble(),
-            'carbs': carbs.toDouble(),
-            'fat': fat.toDouble(),
-          }),
-        );
-      } catch (e) {
-        debugPrint("Error syncing meal to database: $e");
-      }
-    }
-  }
-
-  // --- Session Management Methods ---
+  // --- SESSION MANAGEMENT ---
   Future<void> checkSavedSession() async {
     final prefs = await SharedPreferences.getInstance();
     isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
@@ -198,6 +150,8 @@ class DailyTrackerState extends ChangeNotifier {
     dob = prefs.getString('dob') ?? dob;
     heightCm = prefs.getDouble('heightCm') ?? heightCm;
     weightKg = prefs.getDouble('weightKg') ?? weightKg;
+
+    debugPrint("Session checked: isLoggedIn=$isLoggedIn, userId=$userId");
 
     if (userId > 0) {
       await fetchBackendMeals();
@@ -251,8 +205,58 @@ class DailyTrackerState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Log Exercise & Sync to PostgreSQL ---
-  void logExerciseWithSets({
+  // --- MEAL LOGGING & DATABASE SYNC ---
+  Future<void> logUserMeal({
+    required String day,
+    required String mealCategory,
+    required String foodName,
+    required int calories,
+    required int protein,
+    required int carbs,
+    required int fat,
+  }) async {
+    final mealEntry = {
+      'category': mealCategory,
+      'name': foodName,
+      'calories': calories,
+      'protein': protein,
+      'carbs': carbs,
+      'fat': fat,
+    };
+
+    if (weeklyUserDietLog.containsKey(day)) {
+      weeklyUserDietLog[day]!.add(mealEntry);
+    }
+
+    if (userId > 0) {
+      try {
+        final res = await http.post(
+          Uri.parse('$backendUrl/api/meals'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'user_id': userId,
+            'name': "$mealCategory - $foodName",
+            'quantity': '1 portion',
+            'calories': calories,
+            'protein': protein.toDouble(),
+            'carbs': carbs.toDouble(),
+            'fat': fat.toDouble(),
+          }),
+        );
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          await fetchBackendMeals();
+        }
+      } catch (e) {
+        debugPrint("Error syncing meal to database: $e");
+      }
+    } else {
+      todayLog.add(mealEntry);
+      notifyListeners();
+    }
+  }
+
+  // --- WORKOUT LOGGING & DATABASE SYNC ---
+  Future<void> logExerciseWithSets({
     required String muscle,
     required String exerciseName,
     required List<SetLog> sets,
@@ -263,22 +267,12 @@ class DailyTrackerState extends ChangeNotifier {
     }
 
     updateOrAddPR(muscle, exerciseName, maxWeight);
-
     int estimatedBurn = (sets.length * 45).clamp(50, 600);
     totalCaloriesBurned += estimatedBurn;
 
-    workoutLog.add({
-      'muscle': muscle,
-      'exercise': exerciseName,
-      'sets': sets,
-      'maxWeight': maxWeight,
-      'caloriesBurned': estimatedBurn,
-    });
-    notifyListeners();
-
     if (userId > 0) {
       try {
-        await http.post(
+        final res = await http.post(
           Uri.parse('$backendUrl/api/workouts'),
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -290,29 +284,32 @@ class DailyTrackerState extends ChangeNotifier {
             'max_weight': maxWeight,
           }),
         );
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          await fetchBackendWorkouts();
+        }
       } catch (e) {
         debugPrint("Error syncing workout to database: $e");
       }
+    } else {
+      workoutLog.add({
+        'muscle': muscle,
+        'exercise': exerciseName,
+        'sets': sets,
+        'maxWeight': maxWeight,
+        'caloriesBurned': estimatedBurn,
+      });
+      notifyListeners();
     }
   }
 
-  void logCardioSession(
+  Future<void> logCardioSession(
       String type, int durationMins, double distance, int calories) async {
     totalCaloriesBurned += calories;
     distanceKm += distance;
-    workoutLog.add({
-      'muscle': 'Cardio',
-      'exercise': type,
-      'sets': <SetLog>[],
-      'maxWeight': 0.0,
-      'caloriesBurned': calories,
-      'details': '$durationMins mins | ${distance.toStringAsFixed(2)} km',
-    });
-    notifyListeners();
 
     if (userId > 0) {
       try {
-        await http.post(
+        final res = await http.post(
           Uri.parse('$backendUrl/api/workouts'),
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -324,13 +321,26 @@ class DailyTrackerState extends ChangeNotifier {
             'speed_kmh': durationMins > 0 ? (distance / (durationMins / 60.0)) : 0.0,
           }),
         );
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          await fetchBackendWorkouts();
+        }
       } catch (e) {
         debugPrint("Error syncing cardio to database: $e");
       }
+    } else {
+      workoutLog.add({
+        'muscle': 'Cardio',
+        'exercise': type,
+        'sets': <SetLog>[],
+        'maxWeight': 0.0,
+        'caloriesBurned': calories,
+        'details': '$durationMins mins | ${distance.toStringAsFixed(2)} km',
+      });
+      notifyListeners();
     }
   }
 
-  // --- Retrieve Meals from PostgreSQL ---
+  // --- FETCH MEALS FROM DATABASE ---
   Future<void> fetchBackendMeals() async {
     if (userId <= 0) return;
     try {
@@ -341,6 +351,7 @@ class DailyTrackerState extends ChangeNotifier {
 
         todayLog = meals.map<Map<String, dynamic>>((m) {
           return {
+            'id': m['id'],
             'name': m['name'] ?? 'Meal',
             'quantity': m['quantity'] ?? '',
             'calories': (m['calories'] ?? 0) as int,
@@ -357,7 +368,7 @@ class DailyTrackerState extends ChangeNotifier {
     }
   }
 
-  // --- Retrieve Workouts from PostgreSQL & Reconstruct SetLog Objects ---
+  // --- FETCH WORKOUTS FROM DATABASE ---
   Future<void> fetchBackendWorkouts() async {
     if (userId <= 0) return;
     try {
@@ -376,6 +387,7 @@ class DailyTrackerState extends ChangeNotifier {
           );
 
           return {
+            'id': w['id'],
             'muscle': w['muscle'] ?? 'General',
             'exercise': w['exercise'] ?? 'Exercise',
             'sets': reconstructedSets,
@@ -388,6 +400,30 @@ class DailyTrackerState extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint("Error fetching backend workouts: $e");
+    }
+  }
+
+  // --- DELETE MEAL BUTTON ACTION ---
+  Future<void> deleteMeal(int mealId) async {
+    try {
+      final res = await http.delete(Uri.parse('$backendUrl/api/meals/$mealId'));
+      if (res.statusCode == 200) {
+        await fetchBackendMeals();
+      }
+    } catch (e) {
+      debugPrint("Error deleting meal: $e");
+    }
+  }
+
+  // --- DELETE WORKOUT BUTTON ACTION ---
+  Future<void> deleteWorkout(int workoutId) async {
+    try {
+      final res = await http.delete(Uri.parse('$backendUrl/api/workouts/$workoutId'));
+      if (res.statusCode == 200) {
+        await fetchBackendWorkouts();
+      }
+    } catch (e) {
+      debugPrint("Error deleting workout: $e");
     }
   }
 
