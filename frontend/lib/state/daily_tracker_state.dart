@@ -68,7 +68,6 @@ class DailyTrackerState extends ChangeNotifier {
     'Sunday': [],
   };
 
-  // Dynamic Weekly Consumed Aggregator for Chart
   List<Map<String, dynamic>> get weeklyProgressData {
     List<String> days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     List<String> fullDays = [
@@ -96,7 +95,6 @@ class DailyTrackerState extends ChangeNotifier {
     });
   }
 
-  // Today's Macros Calculated from Logged Meals
   int get totalCalories =>
       todayLog.fold(0, (sum, item) => sum + ((item['calories'] ?? 0) as int));
   int get totalProtein =>
@@ -109,6 +107,19 @@ class DailyTrackerState extends ChangeNotifier {
   DailyTrackerState() {
     _initNotifications();
     checkSavedSession();
+  }
+
+  // --- Hydration Glass Methods ---
+  void addWaterGlass() {
+    waterGlasses++;
+    notifyListeners();
+  }
+
+  void removeWaterGlass() {
+    if (waterGlasses > 0) {
+      waterGlasses--;
+      notifyListeners();
+    }
   }
 
   // --- Theme Toggle Method ---

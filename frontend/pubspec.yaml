@@ -12,10 +12,11 @@ dependencies:
     sdk: flutter
   http: ^1.2.0
   sensors_plus: ^6.0.0
-  flutter_local_notifications: ^17.0.0
   shared_preferences: 2.2.2
   permission_handler: ^11.3.1
   health: ^11.0.0
+  flutter_local_notifications: ^17.2.0
+  timezone: ^0.9.4
 
 dev_dependencies:
   flutter_test:
@@ -25,7 +26,17 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
+  assets:
+    - assets/splash_background.png
+    - assets/app_icon.png
+    - assets/loading_icon.png
+    - assets/icons/chest.png
+    - assets/icons/biceps.png
+    - assets/icons/triceps.png
+    - assets/icons/shoulders.png
+    - assets/icons/legs.png
+    - assets/icons/back.png
+    - assets/icons/abs.png
 
 flutter_launcher_icons:
   android: true

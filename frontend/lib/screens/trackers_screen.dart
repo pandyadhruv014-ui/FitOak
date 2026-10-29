@@ -18,7 +18,6 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
   bool _isFetching = false;
   Map<String, dynamic>? _fetchedNutrition;
 
-  // Hardware Accelerometer Motion Sensor Tracking Variables
   StreamSubscription<UserAccelerometerEvent>? _accelSubscription;
   bool _isSensorActive = false;
   double _lastAccel = 0.0;
@@ -76,7 +75,10 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
       final response = await http.post(
         Uri.parse('$baseUrl/api/ai/nutrition'),
         headers: const {'Content-Type': 'application/json'},
-        body: jsonEncode({'meal_description': query}),
+        body: jsonEncode({
+          'dish_name': query,
+          'quantity': '1 portion',
+        }),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
@@ -140,15 +142,18 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryTextColor = theme.colorScheme.onSurface;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Live Motion & Activity Tracker (Built-in Sensor)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          // 1. Live Motion & Activity Tracker
+          Text("Live Motion & Activity Tracker (Built-in Sensor)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
           const SizedBox(height: 10),
           Card(
-            color: const Color(0xFF1E1E1E),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -180,10 +185,10 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
           ),
           const SizedBox(height: 25),
 
-          const Text("AI Nutritional Value Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          // 2. AI Nutritional Value Tracker
+          Text("AI Nutritional Value Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
           const SizedBox(height: 10),
           Card(
-            color: const Color(0xFF1E1E1E),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -209,7 +214,7 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                   ),
                   if (_fetchedNutrition != null) ...[
                     const Divider(height: 30),
-                    Text('Verified Data for "${_fetchedNutrition!['name']}"', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text('Verified Data for "${_fetchedNutrition!['name']}"', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: primaryTextColor)),
                     const SizedBox(height: 10),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -232,64 +237,6 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                       label: const Text('Add to Today\'s Diet', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ]
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 25),
-
-          const Text("Hydration & Water Intake Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.local_drink, color: Colors.blue, size: 28),
-                          SizedBox(width: 10),
-                          Text("Daily Water Intake", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      Text(
-                        "${dailyTracker.waterGlasses} / ${dailyTracker.waterGoalGlasses} Glasses",
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 15),
-                  LinearProgressIndicator(
-                    value: (dailyTracker.waterGlasses / dailyTracker.waterGoalGlasses).clamp(0.0, 1.0),
-                    backgroundColor: Colors.grey.shade800,
-                    color: Colors.blue,
-                    minHeight: 10,
-                  ),
-                  const SizedBox(height: 15),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: dailyTracker.removeWaterGlass,
-                          icon: const Icon(Icons.remove, color: Colors.redAccent),
-                          label: const Text("-1 Glass", style: TextStyle(color: Colors.redAccent)),
-                        ),
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                          onPressed: dailyTracker.addWaterGlass,
-                          icon: const Icon(Icons.add, color: Colors.white),
-                          label: const Text("+1 Glass", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
-                  )
                 ],
               ),
             ),

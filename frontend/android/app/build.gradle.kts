@@ -7,7 +7,8 @@ plugins {
 android {
     namespace = "com.example.fitoak"
     compileSdk = 36
-
+    ndkVersion = "28.2.13676358"
+    
     defaultConfig {
         applicationId = "com.example.fitoak"
         minSdk = 26

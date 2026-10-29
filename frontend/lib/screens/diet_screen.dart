@@ -82,16 +82,23 @@ class _DietScreenState extends State<DietScreen> {
       context: context,
       barrierDismissible: !isAnalyzing,
       builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        final primaryTextColor = theme.colorScheme.onSurface;
+        final secondaryTextColor = theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
+
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
-              backgroundColor: const Color(0xFF1E1E1E),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Row(
+              backgroundColor: theme.cardColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.deepOrange.withValues(alpha: 0.4)),
+              ),
+              title: Row(
                 children: [
-                  Icon(Icons.auto_awesome, color: Colors.amber, size: 22),
-                  SizedBox(width: 8),
-                  Text("Log Meal with AI", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Icon(Icons.auto_awesome, color: Colors.amber, size: 22),
+                  const SizedBox(width: 8),
+                  Text("Log Meal with AI", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
                 ],
               ),
               content: SingleChildScrollView(
@@ -99,16 +106,17 @@ class _DietScreenState extends State<DietScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       "Enter food name and quantity—Gemini AI will automatically calculate nutritional macros.",
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                      style: TextStyle(color: secondaryTextColor, fontSize: 12),
                     ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: dishController,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: primaryTextColor),
                       decoration: InputDecoration(
                         labelText: "Food / Dish Name",
+                        labelStyle: TextStyle(color: secondaryTextColor),
                         hintText: "e.g., Paneer Tikka or Oats Bowl",
                         prefixIcon: const Icon(Icons.restaurant, color: Colors.orange),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -117,9 +125,10 @@ class _DietScreenState extends State<DietScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: quantityController,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: primaryTextColor),
                       decoration: InputDecoration(
                         labelText: "Quantity / Portion Size",
+                        labelStyle: TextStyle(color: secondaryTextColor),
                         hintText: "e.g., 200g or 2 pieces or 1 bowl",
                         prefixIcon: const Icon(Icons.scale, color: Colors.orange),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -145,7 +154,7 @@ class _DietScreenState extends State<DietScreen> {
               actions: [
                 TextButton(
                   onPressed: isAnalyzing ? null : () => Navigator.pop(dialogContext),
-                  child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+                  child: Text("Cancel", style: TextStyle(color: secondaryTextColor)),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -237,9 +246,13 @@ class _DietScreenState extends State<DietScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryTextColor = theme.colorScheme.onSurface;
+    final secondaryTextColor = theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Diet & Meal Tracker"),
+        title: Text("Diet & Meal Tracker", style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
@@ -264,7 +277,6 @@ class _DietScreenState extends State<DietScreen> {
                 padding: const EdgeInsets.all(16.0),
                 children: [
                   Card(
-                    color: const Color(0xFF1E1E1E),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -274,7 +286,7 @@ class _DietScreenState extends State<DietScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text("Daily Calories", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              Text("Daily Calories", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryTextColor)),
                               Text(
                                 "${totalCalories.toInt()} / ${calorieGoal.toInt()} kcal",
                                 style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
@@ -295,9 +307,9 @@ class _DietScreenState extends State<DietScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
-                              _buildMacroIndicator("Protein", totalProtein, proteinGoal, Colors.redAccent, "g"),
-                              _buildMacroIndicator("Carbs", totalCarbs, carbsGoal, Colors.blueAccent, "g"),
-                              _buildMacroIndicator("Fat", totalFat, fatGoal, Colors.amber, "g"),
+                              _buildMacroIndicator("Protein", totalProtein, proteinGoal, Colors.redAccent, "g", primaryTextColor, secondaryTextColor),
+                              _buildMacroIndicator("Carbs", totalCarbs, carbsGoal, Colors.blueAccent, "g", primaryTextColor, secondaryTextColor),
+                              _buildMacroIndicator("Fat", totalFat, fatGoal, Colors.amber, "g", primaryTextColor, secondaryTextColor),
                             ],
                           ),
                         ],
@@ -307,30 +319,29 @@ class _DietScreenState extends State<DietScreen> {
 
                   const SizedBox(height: 24),
 
-                  const Text(
+                  Text(
                     "Today's Meals",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor),
                   ),
                   const SizedBox(height: 12),
 
                   meals.isEmpty
                       ? Card(
-                          color: const Color(0xFF1E1E1E),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          child: const Padding(
-                            padding: EdgeInsets.all(32.0),
+                          child: Padding(
+                            padding: const EdgeInsets.all(32.0),
                             child: Column(
                               children: [
-                                Icon(Icons.no_meals, color: Colors.grey, size: 48),
-                                SizedBox(height: 12),
+                                Icon(Icons.no_meals, color: secondaryTextColor, size: 48),
+                                const SizedBox(height: 12),
                                 Text(
                                   "No meals logged today.",
-                                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                                  style: TextStyle(color: secondaryTextColor, fontSize: 16),
                                 ),
-                                SizedBox(height: 4),
+                                const SizedBox(height: 4),
                                 Text(
                                   "Tap 'Log Meal' below to auto-calculate macros with Gemini AI.",
-                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  style: TextStyle(color: secondaryTextColor, fontSize: 12),
                                   textAlign: TextAlign.center,
                                 ),
                               ],
@@ -344,7 +355,6 @@ class _DietScreenState extends State<DietScreen> {
                           itemBuilder: (context, index) {
                             final meal = meals[index];
                             return Card(
-                              color: const Color(0xFF1E1E1E),
                               margin: const EdgeInsets.only(bottom: 12.0),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               child: ListTile(
@@ -359,7 +369,7 @@ class _DietScreenState extends State<DietScreen> {
                                 ),
                                 title: Text(
                                   meal['name'] ?? 'Meal',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor),
                                 ),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,12 +377,12 @@ class _DietScreenState extends State<DietScreen> {
                                     if ((meal['quantity'] ?? '').toString().isNotEmpty)
                                       Text(
                                         "Portion: ${meal['quantity']}",
-                                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                        style: TextStyle(color: secondaryTextColor, fontSize: 12),
                                       ),
                                     const SizedBox(height: 4),
                                     Text(
                                       "P: ${meal['protein']}g | C: ${meal['carbs']}g | F: ${meal['fat']}g",
-                                      style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                                      style: TextStyle(color: secondaryTextColor, fontSize: 12),
                                     ),
                                   ],
                                 ),
@@ -394,11 +404,19 @@ class _DietScreenState extends State<DietScreen> {
     );
   }
 
-  Widget _buildMacroIndicator(String title, double current, double goal, Color color, String unit) {
+  Widget _buildMacroIndicator(
+    String title,
+    double current,
+    double goal,
+    Color color,
+    String unit,
+    Color primaryTextColor,
+    Color? secondaryTextColor,
+  ) {
     final progress = (current / goal).clamp(0.0, 1.0);
     return Column(
       children: [
-        Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+        Text(title, style: TextStyle(color: secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         Stack(
           alignment: Alignment.center,
@@ -415,12 +433,12 @@ class _DietScreenState extends State<DietScreen> {
             ),
             Text(
               "${current.toInt()}$unit",
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryTextColor),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        Text("/ ${goal.toInt()}$unit", style: const TextStyle(color: Colors.grey, fontSize: 10)),
+        Text("/ ${goal.toInt()}$unit", style: TextStyle(color: secondaryTextColor, fontSize: 10)),
       ],
     );
   }
