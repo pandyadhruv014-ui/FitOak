@@ -141,8 +141,8 @@ class DailyTrackerState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Log Meal Method ---
-  void logUserMeal({
+  // --- Log Meal Method (With Automatic PostgreSQL Database Sync) ---
+  Future<void> logUserMeal({
     required String day,
     required String mealCategory,
     required String foodName,
@@ -150,7 +150,7 @@ class DailyTrackerState extends ChangeNotifier {
     required int protein,
     required int carbs,
     required int fat,
-  }) {
+  }) async {
     final mealEntry = {
       'category': mealCategory,
       'name': foodName,
@@ -166,6 +166,26 @@ class DailyTrackerState extends ChangeNotifier {
 
     todayLog.add(mealEntry);
     notifyListeners();
+
+    if (userId > 0) {
+      try {
+        await http.post(
+          Uri.parse('$backendUrl/api/meals'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'user_id': userId,
+            'name': "$mealCategory - $foodName",
+            'quantity': '1 portion',
+            'calories': calories,
+            'protein': protein.toDouble(),
+            'carbs': carbs.toDouble(),
+            'fat': fat.toDouble(),
+          }),
+        );
+      } catch (e) {
+        debugPrint("Error syncing meal to database: $e");
+      }
+    }
   }
 
   // --- Session Management Methods ---

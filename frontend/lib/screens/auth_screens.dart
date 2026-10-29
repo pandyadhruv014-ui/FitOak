@@ -110,16 +110,22 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        if (data != null && data['user'] != null) {
-          final user = data['user'];
-          // Fixed parameter names to match DailyTrackerState
+        if (data != null) {
+          final user = data['user'] ?? {};
+          final int resolvedId = user['id'] ?? data['userId'] ?? data['id'] ?? 0;
+          final String resolvedName = user['name'] ?? name;
+          final String resolvedEmail = user['email'] ?? email;
+          final String resolvedDob = user['dob'] ?? dob;
+          final double resolvedHeight = (user['height_cm'] as num?)?.toDouble() ?? height;
+          final double resolvedWeight = (user['weight_kg'] as num?)?.toDouble() ?? weight;
+
           await dailyTracker.saveUserSession(
-            id: user['id'] ?? 0,
-            name: user['name'] ?? name,
-            userEmail: user['email'] ?? email,
-            dobVal: user['dob'] ?? dob,
-            height: (user['height_cm'] as num?)?.toDouble() ?? height,
-            weight: (user['weight_kg'] as num?)?.toDouble() ?? weight,
+            id: resolvedId,
+            name: resolvedName,
+            userEmail: resolvedEmail,
+            dobVal: resolvedDob,
+            height: resolvedHeight,
+            weight: resolvedWeight,
           );
         }
 
