@@ -1,8 +1,10 @@
 import os
 import json
+import traceback
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -21,34 +23,25 @@ def sync_database_schema():
     schema_sql = """
     CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
-        name VARCHAR NOT NULL,
-        email VARCHAR UNIQUE NOT NULL,
-        password VARCHAR NOT NULL,
-        dob VARCHAR DEFAULT '',
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        dob VARCHAR(50) DEFAULT '',
         height_cm FLOAT DEFAULT 0.0,
         weight_kg FLOAT DEFAULT 0.0,
         age INTEGER DEFAULT 0,
-        gender VARCHAR DEFAULT '',
-        goal VARCHAR DEFAULT '',
+        gender VARCHAR(50) DEFAULT '',
+        goal VARCHAR(255) DEFAULT '',
         is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
-    
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS dob VARCHAR DEFAULT '';
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS height_cm FLOAT DEFAULT 0.0;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS weight_kg FLOAT DEFAULT 0.0;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER DEFAULT 0;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR DEFAULT '';
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS goal VARCHAR DEFAULT '';
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
     CREATE TABLE IF NOT EXISTS workouts (
         id SERIAL PRIMARY KEY,
         user_id INTEGER,
-        workout_type VARCHAR DEFAULT 'Strength',
-        muscle VARCHAR,
-        exercise VARCHAR,
+        workout_type VARCHAR(50) DEFAULT 'Strength',
+        muscle VARCHAR(100),
+        exercise VARCHAR(255),
         sets_count INTEGER DEFAULT 0,
         max_weight FLOAT DEFAULT 0.0,
         duration_mins INTEGER DEFAULT 0,
@@ -62,8 +55,8 @@ def sync_database_schema():
     CREATE TABLE IF NOT EXISTS meals (
         id SERIAL PRIMARY KEY,
         user_id INTEGER,
-        name VARCHAR,
-        quantity VARCHAR DEFAULT '',
+        name VARCHAR(255),
+        quantity VARCHAR(100) DEFAULT '',
         calories INTEGER DEFAULT 0,
         protein FLOAT DEFAULT 0.0,
         carbs FLOAT DEFAULT 0.0,
@@ -73,24 +66,53 @@ def sync_database_schema():
 
     CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
     CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
+    CREATE INDEX IF NOT EXISTS ix_meals_user_id ON meals (user_id);
+    CREATE INDEX IF NOT EXISTS ix_workouts_user_id ON workouts (user_id);
     """
     try:
         with engine.begin() as conn:
             conn.execute(text(schema_sql))
-        print("Schema sync complete: Verified tables and applied migrations.")
+        print("✅ Schema sync complete: Tables verified and created.")
     except Exception as e:
-        print(f"Database schema sync warning: {e}")
+        print(f"❌ Database schema sync error: {e}")
+        print(traceback.format_exc())
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("🚀 Starting FitOak Backend...")
+    
+    # Check DATABASE_URL
+    db_url = os.getenv("DATABASE_URL", "NOT_SET")
+    print(f"📊 DATABASE_URL configured: {db_url[:50]}..." if db_url != "NOT_SET" else "❌ DATABASE_URL NOT SET!")
+    
     sync_database_schema()
+    
     try:
         models.Base.metadata.create_all(bind=engine)
+        print("✅ SQLAlchemy models initialized")
     except Exception as e:
-        print(f"ORM initialization error: {e}")
+        print(f"❌ ORM initialization error: {e}")
+        print(traceback.format_exc())
+    
     yield
+    print("🛑 Shutting down FitOak Backend...")
 
 app = FastAPI(title="FitOak Backend", lifespan=lifespan)
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"❌ Unhandled exception: {exc}")
+    print(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "detail": str(exc),
+            "type": type(exc).__name__,
+            "path": str(request.url)
+        }
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -155,77 +177,155 @@ def read_root():
 def health_check():
     return {"status": "ok", "service": "FitOak FastAPI Engine"}
 
+# NEW: Database diagnostic endpoint
+@app.get("/debug/db-status")
+def debug_db_status():
+    try:
+        db_url = os.getenv("DATABASE_URL", "NOT_SET")
+        
+        # Test connection
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT version();"))
+            pg_version = result.fetchone()[0]
+            
+            # Check tables
+            tables_result = conn.execute(text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public';
+            """))
+            tables = [row[0] for row in tables_result.fetchall()]
+            
+            # Count records
+            users_count = conn.execute(text("SELECT COUNT(*) FROM users;")).fetchone()[0]
+            meals_count = conn.execute(text("SELECT COUNT(*) FROM meals;")).fetchone()[0]
+            workouts_count = conn.execute(text("SELECT COUNT(*) FROM workouts;")).fetchone()[0]
+            
+            return {
+                "status": "healthy",
+                "database_url_set": db_url != "NOT_SET",
+                "database_url_prefix": db_url[:30] if db_url != "NOT_SET" else "NOT_SET",
+                "postgres_version": pg_version,
+                "tables": tables,
+                "record_counts": {
+                    "users": users_count,
+                    "meals": meals_count,
+                    "workouts": workouts_count
+                }
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
 # --- AUTHENTICATION ENDPOINTS ---
 @app.post("/api/register")
 @app.post("/api/auth/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
-    sync_database_schema()
-    existing_user = db.query(models.User).filter(models.User.email == user.email).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered. Please login instead."
+    try:
+        sync_database_schema()
+        existing_user = db.query(models.User).filter(models.User.email == user.email).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered. Please login instead."
+            )
+        
+        hashed_password = pwd_context.hash(user.password)
+        
+        db_user = models.User(
+            name=user.name,
+            email=user.email,
+            password=hashed_password,
+            dob=user.dob,
+            height_cm=user.height_cm,
+            weight_kg=user.weight_kg,
+            age=user.age,
+            gender=user.gender,
+            goal=user.goal
         )
-    
-    hashed_password = pwd_context.hash(user.password)
-    
-    db_user = models.User(
-        name=user.name,
-        email=user.email,
-        password=hashed_password,
-        dob=user.dob,
-        height_cm=user.height_cm,
-        weight_kg=user.weight_kg,
-        age=user.age,
-        gender=user.gender,
-        goal=user.goal
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    
-    return {
-        "status": "success",
-        "message": "User registered successfully!",
-        "userId": db_user.id,
-        "id": db_user.id,
-        "token": f"fitoak_token_{db_user.id}",
-        "user": {
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        
+        return {
+            "status": "success",
+            "message": "User registered successfully!",
+            "userId": db_user.id,
             "id": db_user.id,
-            "name": db_user.name,
-            "email": db_user.email,
-            "dob": db_user.dob,
-            "height_cm": db_user.height_cm,
-            "weight_kg": db_user.weight_kg
+            "token": f"fitoak_token_{db_user.id}",
+            "user": {
+                "id": db_user.id,
+                "name": db_user.name,
+                "email": db_user.email,
+                "dob": db_user.dob,
+                "height_cm": db_user.height_cm,
+                "weight_kg": db_user.weight_kg
+            }
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Registration error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
 @app.post("/api/login")
 @app.post("/api/auth/login")
 def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
-    sync_database_schema()
-    user = db.query(models.User).filter(models.User.email == credentials.email).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found. Please register first."
-        )
-    
-    if not pwd_context.verify(credentials.password, user.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password. Please try again."
-        )
-    
-    return {
-        "status": "success",
-        "message": "Login successful",
-        "userId": user.id,
-        "id": user.id,
-        "token": f"fitoak_token_{user.id}",
-        "user": {
+    try:
+        sync_database_schema()
+        user = db.query(models.User).filter(models.User.email == credentials.email).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found. Please register first."
+            )
+        
+        if not pwd_context.verify(credentials.password, user.password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect password. Please try again."
+            )
+        
+        return {
+            "status": "success",
+            "message": "Login successful",
+            "userId": user.id,
             "id": user.id,
+            "token": f"fitoak_token_{user.id}",
+            "user": {
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "dob": user.dob,
+                "height_cm": user.height_cm,
+                "weight_kg": user.weight_kg,
+                "age": user.age,
+                "gender": user.gender,
+                "goal": user.goal
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Login error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+
+@app.get("/api/user/{user_id}")
+@app.get("/api/auth/me")
+def get_user_profile(user_id: int = 1, db: Session = Depends(get_db)):
+    try:
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {
+            "id": user.id,
+            "userId": user.id,
             "name": user.name,
             "email": user.email,
             "dob": user.dob,
@@ -235,26 +335,12 @@ def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
             "gender": user.gender,
             "goal": user.goal
         }
-    }
-
-@app.get("/api/user/{user_id}")
-@app.get("/api/auth/me")
-def get_user_profile(user_id: int = 1, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {
-        "id": user.id,
-        "userId": user.id,
-        "name": user.name,
-        "email": user.email,
-        "dob": user.dob,
-        "height_cm": user.height_cm,
-        "weight_kg": user.weight_kg,
-        "age": user.age,
-        "gender": user.gender,
-        "goal": user.goal
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Get user error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to get user: {str(e)}")
 
 # --- GEMINI AI NUTRITION & CHAT ENDPOINTS ---
 @app.post("/api/ai/nutrition")
@@ -329,78 +415,121 @@ def ai_chat_handler(request: AIChatRequest):
 # --- POSTGRESQL DATABASE SYNC ENDPOINTS ---
 @app.post("/api/workouts")
 def create_workout(workout: WorkoutCreate, db: Session = Depends(get_db)):
-    calories = 0
-    fat_loss = 0.0
-    
-    if workout.workout_type == "Cardio":
-        calories = int(workout.duration_mins * (workout.speed_kmh * 0.8 + 3.0))
-        fat_loss = round((calories / 7700.0) * 1000.0, 2)
-    else:
-        calories = workout.sets_count * 15
+    try:
+        calories = 0
+        fat_loss = 0.0
+        
+        if workout.workout_type == "Cardio":
+            calories = int(workout.duration_mins * (workout.speed_kmh * 0.8 + 3.0))
+            fat_loss = round((calories / 7700.0) * 1000.0, 2)
+        else:
+            calories = workout.sets_count * 15
 
-    db_workout = models.Workout(
-        user_id=workout.user_id,
-        workout_type=workout.workout_type,
-        muscle=workout.muscle,
-        exercise=workout.exercise,
-        sets_count=workout.sets_count,
-        max_weight=workout.max_weight,
-        duration_mins=workout.duration_mins,
-        speed_kmh=workout.speed_kmh,
-        incline=workout.incline,
-        calories_burned=calories,
-        estimated_fat_loss_g=fat_loss
-    )
-    db.add(db_workout)
-    db.commit()
-    db.refresh(db_workout)
-    return {"status": "success", "workout": db_workout}
+        db_workout = models.Workout(
+            user_id=workout.user_id,
+            workout_type=workout.workout_type,
+            muscle=workout.muscle,
+            exercise=workout.exercise,
+            sets_count=workout.sets_count,
+            max_weight=workout.max_weight,
+            duration_mins=workout.duration_mins,
+            speed_kmh=workout.speed_kmh,
+            incline=workout.incline,
+            calories_burned=calories,
+            estimated_fat_loss_g=fat_loss
+        )
+        db.add(db_workout)
+        db.commit()
+        db.refresh(db_workout)
+        return {"status": "success", "workout": db_workout}
+    except Exception as e:
+        print(f"❌ Create workout error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to create workout: {str(e)}")
 
 @app.get("/api/workouts/{user_id}")
 def get_user_workouts(user_id: int, db: Session = Depends(get_db)):
-    workouts = db.query(models.Workout).filter(models.Workout.user_id == user_id).all()
-    return {"status": "success", "workouts": workouts}
+    try:
+        print(f"📊 Fetching workouts for user_id: {user_id}")
+        workouts = db.query(models.Workout).filter(models.Workout.user_id == user_id).all()
+        print(f"✅ Found {len(workouts)} workouts")
+        return {"status": "success", "workouts": workouts}
+    except Exception as e:
+        print(f"❌ Get workouts error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to fetch workouts: {str(e)}")
 
 @app.post("/api/meals")
 def create_meal(meal: MealCreate, db: Session = Depends(get_db)):
-    db_meal = models.Meal(
-        user_id=meal.user_id,
-        name=meal.name,
-        quantity=meal.quantity,
-        calories=meal.calories,
-        protein=meal.protein,
-        carbs=meal.carbs,
-        fat=meal.fat
-    )
-    db.add(db_meal)
-    db.commit()
-    db.refresh(db_meal)
-    return {"status": "success", "meal": db_meal}
+    try:
+        print(f"📥 Creating meal for user_id: {meal.user_id}, name: {meal.name}")
+        
+        db_meal = models.Meal(
+            user_id=meal.user_id,
+            name=meal.name,
+            quantity=meal.quantity,
+            calories=meal.calories,
+            protein=meal.protein,
+            carbs=meal.carbs,
+            fat=meal.fat
+        )
+        db.add(db_meal)
+        db.commit()
+        db.refresh(db_meal)
+        
+        print(f"✅ Meal created successfully with id: {db_meal.id}")
+        return {"status": "success", "meal": db_meal}
+    except Exception as e:
+        print(f"❌ Create meal error: {e}")
+        print(traceback.format_exc())
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create meal: {str(e)}")
 
 @app.get("/api/meals/{user_id}")
 def get_user_meals(user_id: int, db: Session = Depends(get_db)):
-    meals = db.query(models.Meal).filter(models.Meal.user_id == user_id).all()
-    return {"status": "success", "meals": meals}
+    try:
+        print(f"📊 Fetching meals for user_id: {user_id}")
+        meals = db.query(models.Meal).filter(models.Meal.user_id == user_id).all()
+        print(f"✅ Found {len(meals)} meals")
+        return {"status": "success", "meals": meals}
+    except Exception as e:
+        print(f"❌ Get meals error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to fetch meals: {str(e)}")
+
+@app.delete("/api/meals/{meal_id}")
+def delete_meal(meal_id: int, db: Session = Depends(get_db)):
+    try:
+        meal = db.query(models.Meal).filter(models.Meal.id == meal_id).first()
+        if not meal:
+            raise HTTPException(status_code=404, detail="Meal not found")
+        db.delete(meal)
+        db.commit()
+        return {"status": "success", "message": "Meal deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Delete meal error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to delete meal: {str(e)}")
+
+@app.delete("/api/workouts/{workout_id}")
+def delete_workout(workout_id: int, db: Session = Depends(get_db)):
+    try:
+        workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
+        if not workout:
+            raise HTTPException(status_code=404, detail="Workout not found")
+        db.delete(workout)
+        db.commit()
+        return {"status": "success", "message": "Workout deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Delete workout error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to delete workout: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
-
-@app.delete("/api/meals/{meal_id}")
-def delete_meal(meal_id: int, db: Session = Depends(get_db)):
-    meal = db.query(models.Meal).filter(models.Meal.id == meal_id).first()
-    if not meal:
-        raise HTTPException(status_code=404, detail="Meal not found")
-    db.delete(meal)
-    db.commit()
-    return {"status": "success", "message": "Meal deleted successfully"}
-
-@app.delete("/api/workouts/{workout_id}")
-def delete_workout(workout_id: int, db: Session = Depends(get_db)):
-    workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
-    if not workout:
-        raise HTTPException(status_code=404, detail="Workout not found")
-    db.delete(workout)
-    db.commit()
-    return {"status": "success", "message": "Workout deleted successfully"}
