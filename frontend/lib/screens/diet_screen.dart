@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -36,42 +37,63 @@ class _DietScreenState extends State<DietScreen> {
   }
 
   Future<void> _fetchUserMeals() async {
-    setState(() => isLoading = true);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
+  setState(() => isLoading = true);
+  
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
 
-      if (userId > 0) {
-        final res = await http.get(Uri.parse('$backendUrl/api/meals/$userId'));
-        if (res.statusCode == 200) {
-          final data = json.decode(res.body);
-          final fetchedMeals = data['meals'] ?? [];
+    debugPrint("🔍 Fetching meals for userId: $userId");
 
-          double cals = 0, p = 0, c = 0, f = 0;
-          for (var meal in fetchedMeals) {
-            cals += (meal['calories'] ?? 0).toDouble();
-            p += (meal['protein'] ?? 0).toDouble();
-            c += (meal['carbs'] ?? 0).toDouble();
-            f += (meal['fat'] ?? 0).toDouble();
-          }
+    if (userId > 0) {
+      final res = await http
+          .get(Uri.parse('$backendUrl/api/meals/$userId'))
+          .timeout(const Duration(seconds: 60));
+      
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final fetchedMeals = data['meals'] ?? [];
 
-          if (mounted) {
-            setState(() {
-              meals = fetchedMeals.reversed.toList(); // Newest first
-              totalCalories = cals;
-              totalProtein = p;
-              totalCarbs = c;
-              totalFat = f;
-            });
-          }
+        double cals = 0, p = 0, c = 0, f = 0;
+        for (var meal in fetchedMeals) {
+          cals += (meal['calories'] ?? 0).toDouble();
+          p += (meal['protein'] ?? 0).toDouble();
+          c += (meal['carbs'] ?? 0).toDouble();
+          f += (meal['fat'] ?? 0).toDouble();
         }
+
+        if (mounted) {
+          setState(() {
+            meals = fetchedMeals.reversed.toList();
+            totalCalories = cals;
+            totalProtein = p;
+            totalCarbs = c;
+            totalFat = f;
+          });
+        }
+        
+        debugPrint("✅ Successfully loaded ${fetchedMeals.length} meals");
       }
-    } catch (e) {
-      debugPrint("Error loading meals: $e");
-    } finally {
-      if (mounted) setState(() => isLoading = false);
+    } else {
+      debugPrint("⚠️ Invalid userId: $userId");
     }
+  } on TimeoutException catch (e) {
+    debugPrint("⏱️ Timeout loading meals: $e");
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("⏱️ Server is waking up... Please wait and try again."),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 5),
+        ),
+      );
+    }
+  } catch (e) {
+    debugPrint("❌ Error loading meals: $e");
+  } finally {
+    if (mounted) setState(() => isLoading = false);
   }
+}
 
   void _showAddMealDialog() {
     final dishController = TextEditingController();
@@ -176,8 +198,21 @@ class _DietScreenState extends State<DietScreen> {
                           try {
                             final prefs = await SharedPreferences.getInstance();
                             final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
-
+                            debugPrint("🔑 Retrieved userId from prefs: $userId");
+                            debugPrint("🔑 DailyTracker userId: ${dailyTracker.userId}");
+                            debugPrint("🔑 DailyTracker isLoggedIn: ${dailyTracker.isLoggedIn}");
+                            if (userId <= 0) {
+                             if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                             const SnackBar(
+                             content: Text("⚠️ User session expired. Please log in again."),
+                             backgroundColor: Colors.red,
+                           ),
+                         );
+                         return;
+                        }
                             // 1. Fetch AI Nutrients
+                            debugPrint("📡 Calling AI for nutrition analysis...");
                             final aiRes = await http.post(
                               Uri.parse('$backendUrl/api/ai/nutrition'),
                               headers: {'Content-Type': 'application/json'},
@@ -186,7 +221,7 @@ class _DietScreenState extends State<DietScreen> {
                                 'quantity': quantityController.text.trim(),
                               }),
                             );
-
+                              debugPrint("📥 AI Response: ${aiRes.statusCode} - ${aiRes.body}");
                             if (aiRes.statusCode == 200) {
                               final aiData = json.decode(aiRes.body)['data'];
 

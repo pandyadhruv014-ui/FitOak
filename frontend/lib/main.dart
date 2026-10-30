@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
 import 'state/daily_tracker_state.dart';
 import 'services/notification_service.dart';
 import 'splash_screen.dart';
@@ -20,15 +22,19 @@ class FitOakApp extends StatefulWidget {
 }
 
 class _FitOakAppState extends State<FitOakApp> with WidgetsBindingObserver {
+  Timer? _keepAliveTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _requestAppPermissions();
+    _startKeepAlive(); // Start keep-alive pings
   }
 
   @override
   void dispose() {
+    _keepAliveTimer?.cancel(); // Cancel timer when app closes
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -37,6 +43,9 @@ class _FitOakAppState extends State<FitOakApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       dailyTracker.checkSavedSession();
+      _startKeepAlive(); // Restart keep-alive when app resumes
+    } else if (state == AppLifecycleState.paused) {
+      _keepAliveTimer?.cancel(); // Stop pinging when app is in background
     }
   }
 
@@ -47,6 +56,29 @@ class _FitOakAppState extends State<FitOakApp> with WidgetsBindingObserver {
       Permission.sensors,
       Permission.location,
     ].request();
+  }
+
+  // Keep-Alive Function to prevent Render backend from sleeping
+  void _startKeepAlive() {
+    _keepAliveTimer?.cancel(); // Cancel existing timer if any
+    
+    _keepAliveTimer = Timer.periodic(const Duration(minutes: 10), (timer) async {
+      try {
+        final response = await http
+            .get(Uri.parse('$baseUrl/health'))
+            .timeout(const Duration(seconds: 10));
+        
+        if (response.statusCode == 200) {
+          debugPrint("🏓 Keep-alive ping successful - Server is awake");
+        } else {
+          debugPrint("🏓 Keep-alive ping returned status: ${response.statusCode}");
+        }
+      } catch (e) {
+        debugPrint("🏓 Keep-alive ping failed: $e");
+      }
+    });
+    
+    debugPrint("✅ Keep-alive timer started (pings every 10 minutes)");
   }
 
   @override

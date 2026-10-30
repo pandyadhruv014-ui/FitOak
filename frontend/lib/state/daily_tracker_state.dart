@@ -205,55 +205,70 @@ class DailyTrackerState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- MEAL LOGGING & DATABASE SYNC ---
-  Future<void> logUserMeal({
-    required String day,
-    required String mealCategory,
-    required String foodName,
-    required int calories,
-    required int protein,
-    required int carbs,
-    required int fat,
-  }) async {
-    final mealEntry = {
-      'category': mealCategory,
-      'name': foodName,
-      'calories': calories,
-      'protein': protein,
-      'carbs': carbs,
-      'fat': fat,
-    };
+// --- MEAL LOGGING & DATABASE SYNC ---
+Future<void> logUserMeal({
+  required String day,
+  required String mealCategory,
+  required String foodName,
+  required int calories,
+  required int protein,
+  required int carbs,
+  required int fat,
+}) async {
+  debugPrint("🍽️ logUserMeal called - Day: $day, Food: $foodName, User ID: $userId");
+  
+  final mealEntry = {
+    'category': mealCategory,
+    'name': foodName,
+    'calories': calories,
+    'protein': protein,
+    'carbs': carbs,
+    'fat': fat,
+  };
 
-    if (weeklyUserDietLog.containsKey(day)) {
-      weeklyUserDietLog[day]!.add(mealEntry);
-    }
-
-    if (userId > 0) {
-      try {
-        final res = await http.post(
-          Uri.parse('$backendUrl/api/meals'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'user_id': userId,
-            'name': "$mealCategory - $foodName",
-            'quantity': '1 portion',
-            'calories': calories,
-            'protein': protein.toDouble(),
-            'carbs': carbs.toDouble(),
-            'fat': fat.toDouble(),
-          }),
-        );
-        if (res.statusCode == 200 || res.statusCode == 201) {
-          await fetchBackendMeals();
-        }
-      } catch (e) {
-        debugPrint("Error syncing meal to database: $e");
-      }
-    } else {
-      todayLog.add(mealEntry);
-      notifyListeners();
-    }
+  if (weeklyUserDietLog.containsKey(day)) {
+    weeklyUserDietLog[day]!.add(mealEntry);
   }
+
+  debugPrint("📊 Attempting to sync to backend. userId=$userId");
+  
+  if (userId > 0) {
+    try {
+      final payload = {
+        'user_id': userId,
+        'name': "$mealCategory - $foodName",
+        'quantity': '1 portion',
+        'calories': calories,
+        'protein': protein.toDouble(),
+        'carbs': carbs.toDouble(),
+        'fat': fat.toDouble(),
+      };
+      
+      debugPrint("📤 Sending to backend: $payload");
+      
+      final res = await http.post(
+        Uri.parse('$backendUrl/api/meals'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(payload),
+      );
+      
+      debugPrint("📥 Backend response: ${res.statusCode} - ${res.body}");
+      
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        debugPrint("✅ Meal logged successfully to database!");
+        await fetchBackendMeals();
+      } else {
+        debugPrint("❌ Failed to log meal. Status: ${res.statusCode}, Body: ${res.body}");
+      }
+    } catch (e) {
+      debugPrint("❌ Error syncing meal to database: $e");
+    }
+  } else {
+    debugPrint("⚠️ userId is 0 or invalid, storing locally only");
+    todayLog.add(mealEntry);
+    notifyListeners();
+  }
+}
 
   // --- WORKOUT LOGGING & DATABASE SYNC ---
   Future<void> logExerciseWithSets({
@@ -341,10 +356,21 @@ class DailyTrackerState extends ChangeNotifier {
   }
 
   // --- FETCH MEALS FROM DATABASE ---
-  Future<void> fetchBackendMeals() async {
-    if (userId <= 0) return;
+Future<void> fetchBackendMeals() async {
+  if (userId <= 0) return;
+  
+  int retryCount = 0;
+  const maxRetries = 3;
+  const timeoutDuration = Duration(seconds: 60); // Increased from default 30s
+  
+  while (retryCount < maxRetries) {
     try {
-      final res = await http.get(Uri.parse('$backendUrl/api/meals/$userId'));
+      debugPrint("📡 Fetching meals from backend (attempt ${retryCount + 1}/$maxRetries)...");
+      
+      final res = await http
+          .get(Uri.parse('$backendUrl/api/meals/$userId'))
+          .timeout(timeoutDuration);
+      
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final List meals = data['meals'] ?? [];
@@ -361,18 +387,54 @@ class DailyTrackerState extends ChangeNotifier {
           };
         }).toList();
 
+        debugPrint("✅ Fetched ${meals.length} meals successfully");
         notifyListeners();
+        return; // Success - exit the retry loop
+      } else {
+        debugPrint("⚠️ Server returned status ${res.statusCode}");
+        throw Exception("Server error: ${res.statusCode}");
+      }
+    } on TimeoutException catch (e) {
+      retryCount++;
+      debugPrint("⏱️ Request timeout (attempt $retryCount/$maxRetries): $e");
+      
+      if (retryCount >= maxRetries) {
+        debugPrint("❌ Max retries reached. Server might be sleeping on Render.");
+        debugPrint("💡 Tip: Render free tier sleeps after 15min inactivity. First request takes 30-60s to wake up.");
+      } else {
+        // Wait before retrying (exponential backoff)
+        await Future.delayed(Duration(seconds: retryCount * 5));
       }
     } catch (e) {
-      debugPrint("Error fetching backend meals: $e");
+      retryCount++;
+      debugPrint("❌ Error fetching backend meals (attempt $retryCount/$maxRetries): $e");
+      
+      if (retryCount >= maxRetries) {
+        debugPrint("❌ Failed to fetch meals after $maxRetries attempts");
+        break;
+      } else {
+        await Future.delayed(Duration(seconds: retryCount * 3));
+      }
     }
   }
+}
 
   // --- FETCH WORKOUTS FROM DATABASE ---
-  Future<void> fetchBackendWorkouts() async {
-    if (userId <= 0) return;
+Future<void> fetchBackendWorkouts() async {
+  if (userId <= 0) return;
+  
+  int retryCount = 0;
+  const maxRetries = 3;
+  const timeoutDuration = Duration(seconds: 60);
+  
+  while (retryCount < maxRetries) {
     try {
-      final res = await http.get(Uri.parse('$backendUrl/api/workouts/$userId'));
+      debugPrint("📡 Fetching workouts from backend (attempt ${retryCount + 1}/$maxRetries)...");
+      
+      final res = await http
+          .get(Uri.parse('$backendUrl/api/workouts/$userId'))
+          .timeout(timeoutDuration);
+      
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final List workouts = data['workouts'] ?? [];
@@ -396,12 +458,29 @@ class DailyTrackerState extends ChangeNotifier {
           };
         }).toList();
 
+        debugPrint("✅ Fetched ${workouts.length} workouts successfully");
         notifyListeners();
+        return; // Success - exit the retry loop
+      }
+    } on TimeoutException catch (e) {
+      retryCount++;
+      debugPrint("⏱️ Workout fetch timeout (attempt $retryCount/$maxRetries): $e");
+      
+      if (retryCount < maxRetries) {
+        await Future.delayed(Duration(seconds: retryCount * 5));
       }
     } catch (e) {
-      debugPrint("Error fetching backend workouts: $e");
+      retryCount++;
+      debugPrint("❌ Error fetching backend workouts (attempt $retryCount/$maxRetries): $e");
+      
+      if (retryCount < maxRetries) {
+        await Future.delayed(Duration(seconds: retryCount * 3));
+      } else {
+        break;
+      }
     }
   }
+}
 
   // --- DELETE MEAL BUTTON ACTION ---
   Future<void> deleteMeal(int mealId) async {

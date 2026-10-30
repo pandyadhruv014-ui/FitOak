@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../state/daily_tracker_state.dart';
 import 'main_app_shell.dart';
@@ -127,6 +128,14 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
             height: resolvedHeight,
             weight: resolvedWeight,
           );
+          debugPrint("✅ User session saved!");
+          debugPrint("📝 Stored userId: $resolvedId");
+          debugPrint("📝 Stored name: $resolvedName");
+          debugPrint("📝 Stored email: $resolvedEmail");
+          
+          final testPrefs = await SharedPreferences.getInstance();
+          final savedUserId = testPrefs.getInt('userId');
+          debugPrint("🔍 Verification - userId from prefs: $savedUserId");
         }
 
         if (!mounted) return;

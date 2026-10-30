@@ -1,4 +1,12 @@
-.env
 __pycache__/
-*.db
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
 venv/
+.env
+.venv
+*.db
+.DS_Store
+*.log
