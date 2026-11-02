@@ -64,9 +64,26 @@ def sync_database_schema():
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Safe column additions if tables already existed without them
+    -- Automatically patch missing columns on existing tables
     ALTER TABLE workouts ADD COLUMN IF NOT EXISTS user_id INTEGER;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS workout_type VARCHAR(50) DEFAULT 'Strength';
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS muscle VARCHAR(100);
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS exercise VARCHAR(255);
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS sets_count INTEGER DEFAULT 0;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS max_weight FLOAT DEFAULT 0.0;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS duration_mins INTEGER DEFAULT 0;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS speed_kmh FLOAT DEFAULT 0.0;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS incline FLOAT DEFAULT 0.0;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS calories_burned INTEGER DEFAULT 0;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS estimated_fat_loss_g FLOAT DEFAULT 0.0;
+
     ALTER TABLE meals ADD COLUMN IF NOT EXISTS user_id INTEGER;
+    ALTER TABLE meals ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+    ALTER TABLE meals ADD COLUMN IF NOT EXISTS quantity VARCHAR(100) DEFAULT '';
+    ALTER TABLE meals ADD COLUMN IF NOT EXISTS calories INTEGER DEFAULT 0;
+    ALTER TABLE meals ADD COLUMN IF NOT EXISTS protein FLOAT DEFAULT 0.0;
+    ALTER TABLE meals ADD COLUMN IF NOT EXISTS carbs FLOAT DEFAULT 0.0;
+    ALTER TABLE meals ADD COLUMN IF NOT EXISTS fat FLOAT DEFAULT 0.0;
 
     CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
     CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
@@ -76,11 +93,10 @@ def sync_database_schema():
     try:
         with engine.begin() as conn:
             conn.execute(text(schema_sql))
-        print("✅ Schema sync complete: Tables and columns verified/patched.")
+        print("✅ Schema sync complete: All tables and columns verified/patched.")
     except Exception as e:
         print(f"❌ Database schema sync error: {e}")
         print(traceback.format_exc())
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Starting FitOak Backend...")
