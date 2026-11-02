@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
-import '../main.dart';
 
 class GroqService {
   static const String _backendUrl = 'https://backend-um5a.onrender.com/api/ai/chat';

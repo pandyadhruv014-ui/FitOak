@@ -14,15 +14,15 @@ class DietScreen extends StatefulWidget {
 
 class _DietScreenState extends State<DietScreen> {
   final String backendUrl = "https://backend-um5a.onrender.com";
-  
+
   List<dynamic> meals = [];
   bool isLoading = true;
 
   // Daily Nutritional Goals
   final double calorieGoal = 2200.0;
-  final double proteinGoal = 140.0; // grams
-  final double carbsGoal = 250.0;   // grams
-  final double fatGoal = 70.0;       // grams
+  final double proteinGoal = 140.0;
+  final double carbsGoal = 250.0;
+  final double fatGoal = 70.0;
 
   // Current Totals
   double totalCalories = 0.0;
@@ -37,79 +37,91 @@ class _DietScreenState extends State<DietScreen> {
   }
 
   Future<void> _fetchUserMeals() async {
-  setState(() => isLoading = true);
-  
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
+    if (!mounted) return;
+    setState(() => isLoading = true);
 
-    debugPrint("🔍 Fetching meals for userId: $userId");
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
 
-    if (userId > 0) {
-      final res = await http
-          .get(Uri.parse('$backendUrl/api/meals/$userId'))
-          .timeout(const Duration(seconds: 60));
-      
-      if (res.statusCode == 200) {
-        final data = json.decode(res.body);
-        final fetchedMeals = data['meals'] ?? [];
+      debugPrint("🔍 Fetching meals for userId: $userId");
 
-        double cals = 0, p = 0, c = 0, f = 0;
-        for (var meal in fetchedMeals) {
-          cals += (meal['calories'] ?? 0).toDouble();
-          p += (meal['protein'] ?? 0).toDouble();
-          c += (meal['carbs'] ?? 0).toDouble();
-          f += (meal['fat'] ?? 0).toDouble();
+      if (userId > 0) {
+        final res = await http
+            .get(Uri.parse('$backendUrl/api/meals/$userId'))
+            .timeout(const Duration(seconds: 30));
+
+        debugPrint("📥 Meals response: ${res.statusCode}");
+
+        if (res.statusCode == 200) {
+          final data = json.decode(res.body);
+          final fetchedMeals = data['meals'] ?? [];
+
+          double cals = 0, p = 0, c = 0, f = 0;
+          for (var meal in fetchedMeals) {
+            cals += (meal['calories'] ?? 0).toDouble();
+            p += (meal['protein'] ?? 0).toDouble();
+            c += (meal['carbs'] ?? 0).toDouble();
+            f += (meal['fat'] ?? 0).toDouble();
+          }
+
+          if (mounted) {
+            setState(() {
+              meals = fetchedMeals.reversed.toList();
+              totalCalories = cals;
+              totalProtein = p;
+              totalCarbs = c;
+              totalFat = f;
+            });
+          }
+
+          debugPrint("✅ Successfully loaded ${fetchedMeals.length} meals");
+        } else {
+          debugPrint("⚠️ Server returned: ${res.statusCode}");
         }
-
-        if (mounted) {
-          setState(() {
-            meals = fetchedMeals.reversed.toList();
-            totalCalories = cals;
-            totalProtein = p;
-            totalCarbs = c;
-            totalFat = f;
-          });
-        }
-        
-        debugPrint("✅ Successfully loaded ${fetchedMeals.length} meals");
+      } else {
+        debugPrint("⚠️ Invalid userId: $userId");
       }
-    } else {
-      debugPrint("⚠️ Invalid userId: $userId");
+    } on TimeoutException catch (e) {
+      debugPrint("⏱️ Timeout loading meals: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("⏱️ Server is waking up... Please wait and try again."),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("❌ Error loading meals: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("❌ Error: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
-  } on TimeoutException catch (e) {
-    debugPrint("⏱️ Timeout loading meals: $e");
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("⏱️ Server is waking up... Please wait and try again."),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 5),
-        ),
-      );
-    }
-  } catch (e) {
-    debugPrint("❌ Error loading meals: $e");
-  } finally {
-    if (mounted) setState(() => isLoading = false);
   }
-}
 
   void _showAddMealDialog() {
     final dishController = TextEditingController();
     final quantityController = TextEditingController();
-    bool isAnalyzing = false;
 
     showDialog(
       context: context,
-      barrierDismissible: !isAnalyzing,
       builder: (dialogContext) {
+        bool isAnalyzing = false;
         final theme = Theme.of(dialogContext);
         final primaryTextColor = theme.colorScheme.onSurface;
         final secondaryTextColor = theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
 
         return StatefulBuilder(
-          builder: (dialogContext, setDialogState) {
+          builder: (stateContext, setDialogState) {
             return AlertDialog(
               backgroundColor: theme.cardColor,
               shape: RoundedRectangleBorder(
@@ -135,6 +147,7 @@ class _DietScreenState extends State<DietScreen> {
                     const SizedBox(height: 16),
                     TextField(
                       controller: dishController,
+                      enabled: !isAnalyzing,
                       style: TextStyle(color: primaryTextColor),
                       decoration: InputDecoration(
                         labelText: "Food / Dish Name",
@@ -147,6 +160,7 @@ class _DietScreenState extends State<DietScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: quantityController,
+                      enabled: !isAnalyzing,
                       style: TextStyle(color: primaryTextColor),
                       decoration: InputDecoration(
                         labelText: "Quantity / Portion Size",
@@ -175,7 +189,13 @@ class _DietScreenState extends State<DietScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: isAnalyzing ? null : () => Navigator.pop(dialogContext),
+                  onPressed: isAnalyzing
+                      ? null
+                      : () {
+                          if (Navigator.canPop(stateContext)) {
+                            Navigator.pop(stateContext);
+                          }
+                        },
                   child: Text("Cancel", style: TextStyle(color: secondaryTextColor)),
                 ),
                 ElevatedButton(
@@ -186,10 +206,15 @@ class _DietScreenState extends State<DietScreen> {
                   onPressed: isAnalyzing
                       ? null
                       : () async {
-                          if (dishController.text.trim().isEmpty || quantityController.text.trim().isEmpty) {
-                            ScaffoldMessenger.of(dialogContext).showSnackBar(
-                              const SnackBar(content: Text("Please fill in dish name and quantity.")),
-                            );
+                          final dish = dishController.text.trim();
+                          final quantity = quantityController.text.trim();
+
+                          if (dish.isEmpty || quantity.isEmpty) {
+                            if (stateContext.mounted) {
+                              ScaffoldMessenger.of(stateContext).showSnackBar(
+                                const SnackBar(content: Text("Please fill in dish name and quantity.")),
+                              );
+                            }
                             return;
                           }
 
@@ -198,75 +223,124 @@ class _DietScreenState extends State<DietScreen> {
                           try {
                             final prefs = await SharedPreferences.getInstance();
                             final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
-                            debugPrint("🔑 Retrieved userId from prefs: $userId");
-                            debugPrint("🔑 DailyTracker userId: ${dailyTracker.userId}");
-                            debugPrint("🔑 DailyTracker isLoggedIn: ${dailyTracker.isLoggedIn}");
-                            if (userId <= 0) {
-                             if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                             const SnackBar(
-                             content: Text("⚠️ User session expired. Please log in again."),
-                             backgroundColor: Colors.red,
-                           ),
-                         );
-                         return;
-                        }
-                            // 1. Fetch AI Nutrients
-                            debugPrint("📡 Calling AI for nutrition analysis...");
-                            final aiRes = await http.post(
-                              Uri.parse('$backendUrl/api/ai/nutrition'),
-                              headers: {'Content-Type': 'application/json'},
-                              body: json.encode({
-                                'dish_name': dishController.text.trim(),
-                                'quantity': quantityController.text.trim(),
-                              }),
-                            );
-                              debugPrint("📥 AI Response: ${aiRes.statusCode} - ${aiRes.body}");
-                            if (aiRes.statusCode == 200) {
-                              final aiData = json.decode(aiRes.body)['data'];
 
-                              // 2. Persist Meal to PostgreSQL
-                              if (userId > 0) {
-                                await http.post(
-                                  Uri.parse('$backendUrl/api/meals'),
+                            debugPrint("🔑 Retrieved userId: $userId");
+
+                            if (userId <= 0) {
+                              setDialogState(() => isAnalyzing = false);
+                              if (stateContext.mounted) {
+                                ScaffoldMessenger.of(stateContext).showSnackBar(
+                                  const SnackBar(
+                                    content: Text("⚠️ User session expired. Please log in again."),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                if (Navigator.canPop(stateContext)) {
+                                  Navigator.pop(stateContext);
+                                }
+                              }
+                              return;
+                            }
+
+                            // 1. Fetch AI Nutrients
+                            debugPrint("📡 Calling Gemini AI for nutrition analysis...");
+                            debugPrint("📤 Dish: $dish, Quantity: $quantity");
+
+                            final aiRes = await http
+                                .post(
+                                  Uri.parse('$backendUrl/api/ai/nutrition'),
                                   headers: {'Content-Type': 'application/json'},
                                   body: json.encode({
-                                    'user_id': userId,
-                                    'name': aiData['meal_name'] ?? dishController.text.trim(),
-                                    'quantity': quantityController.text.trim(),
-                                    'calories': (aiData['calories'] ?? 0).toInt(),
-                                    'protein': (aiData['protein_g'] ?? 0.0).toDouble(),
-                                    'carbs': (aiData['carbs_g'] ?? 0.0).toDouble(),
-                                    'fat': (aiData['fat_g'] ?? 0.0).toDouble(),
+                                    'dish_name': dish,
+                                    'quantity': quantity,
                                   }),
-                                );
+                                )
+                                .timeout(const Duration(seconds: 45));
+
+                            debugPrint("📥 AI Response status: ${aiRes.statusCode}");
+                            debugPrint("📥 AI Response body: ${aiRes.body}");
+
+                            if (aiRes.statusCode == 200) {
+                              final aiData = json.decode(aiRes.body)['data'];
+                              debugPrint("✅ AI analyzed: $aiData");
+
+                              // 2. Persist Meal to PostgreSQL
+                              final mealPayload = {
+                                'user_id': userId,
+                                'name': aiData['meal_name'] ?? dish,
+                                'quantity': quantity,
+                                'calories': (aiData['calories'] ?? 0).toInt(),
+                                'protein': (aiData['protein_g'] ?? 0.0).toDouble(),
+                                'carbs': (aiData['carbs_g'] ?? 0.0).toDouble(),
+                                'fat': (aiData['fat_g'] ?? 0.0).toDouble(),
+                              };
+
+                              debugPrint("📤 Sending meal to backend: $mealPayload");
+
+                              final mealRes = await http
+                                  .post(
+                                    Uri.parse('$backendUrl/api/meals'),
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: json.encode(mealPayload),
+                                  )
+                                  .timeout(const Duration(seconds: 30));
+
+                              debugPrint("📥 Meal save status: ${mealRes.statusCode}");
+                              debugPrint("📥 Meal save body: ${mealRes.body}");
+
+                              if (mealRes.statusCode == 200 || mealRes.statusCode == 201) {
+                                debugPrint("✅ Meal successfully saved to database!");
+
+                                // Close dialog first
+                                if (stateContext.mounted && Navigator.canPop(stateContext)) {
+                                  Navigator.pop(stateContext);
+                                }
+
+                                // Refresh data
+                                await dailyTracker.fetchBackendMeals();
+                                if (mounted) {
+                                  await _fetchUserMeals();
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        "✅ Logged ${aiData['meal_name']} (${aiData['calories']} kcal)!",
+                                      ),
+                                      backgroundColor: Colors.green,
+                                      duration: const Duration(seconds: 3),
+                                    ),
+                                  );
+                                }
+                              } else {
+                                throw Exception("Failed to save meal: ${mealRes.statusCode} - ${mealRes.body}");
                               }
-
-                              dailyTracker.fetchBackendMeals();
-
-                              if (!dialogContext.mounted) return;
-                              Navigator.pop(dialogContext);
-
-                              if (!mounted) return;
-                              _fetchUserMeals();
-
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    "Logged ${aiData['meal_name']} (${aiData['calories']} kcal)!",
-                                  ),
-                                  backgroundColor: Colors.green,
+                            } else {
+                              throw Exception("AI Analysis Failed: ${aiRes.statusCode} - ${aiRes.body}");
+                            }
+                          } on TimeoutException catch (e) {
+                            debugPrint("⏱️ Timeout: $e");
+                            setDialogState(() => isAnalyzing = false);
+                            if (stateContext.mounted) {
+                              ScaffoldMessenger.of(stateContext).showSnackBar(
+                                const SnackBar(
+                                  content: Text("⏱️ Request timeout. Server may be waking up. Try again in 30 seconds."),
+                                  backgroundColor: Colors.orange,
+                                  duration: Duration(seconds: 5),
                                 ),
                               );
-                            } else {
-                              throw Exception("AI Analysis Failed");
                             }
                           } catch (e) {
+                            debugPrint("❌ Error in meal logging: $e");
                             setDialogState(() => isAnalyzing = false);
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Error logging meal: $e")),
-                            );
+                            if (stateContext.mounted) {
+                              ScaffoldMessenger.of(stateContext).showSnackBar(
+                                SnackBar(
+                                  content: Text("❌ Error: ${e.toString()}"),
+                                  backgroundColor: Colors.red,
+                                  duration: const Duration(seconds: 5),
+                                ),
+                              );
+                            }
                           }
                         },
                   child: const Text("Analyze & Log", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -294,6 +368,7 @@ class _DietScreenState extends State<DietScreen> {
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.orange),
             onPressed: _fetchUserMeals,
+            tooltip: "Refresh meals",
           ),
         ],
       ),

@@ -64,6 +64,10 @@ def sync_database_schema():
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Safe column additions if tables already existed without them
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS user_id INTEGER;
+    ALTER TABLE meals ADD COLUMN IF NOT EXISTS user_id INTEGER;
+
     CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
     CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
     CREATE INDEX IF NOT EXISTS ix_meals_user_id ON meals (user_id);
@@ -72,7 +76,7 @@ def sync_database_schema():
     try:
         with engine.begin() as conn:
             conn.execute(text(schema_sql))
-        print("✅ Schema sync complete: Tables verified and created.")
+        print("✅ Schema sync complete: Tables and columns verified/patched.")
     except Exception as e:
         print(f"❌ Database schema sync error: {e}")
         print(traceback.format_exc())
