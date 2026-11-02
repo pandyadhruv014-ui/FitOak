@@ -368,29 +368,33 @@ def analyze_nutrition(request: NutritionRequest):
     if not gemini_client:
         raise HTTPException(
             status_code=500, 
-            detail="Gemini API client is not configured on the server. Please check your GEMINI_API_KEY environment variable on Render."
+            detail="Gemini API client is not configured on the server."
         )
     
+    # Extract dish name and quantity if combined
+    dish = request.dish_name
+    qty = request.quantity if request.quantity else "1 portion"
+
     prompt = f"""
     You are an accurate nutritional database engine. Calculate realistic macros for:
-    Food Dish: "{request.dish_name}"
-    Portion/Quantity: "{request.quantity}"
+    Food Query: "{dish}" (Quantity: "{qty}")
 
     Provide accurate, genuine numbers for this exact portion.
-    Return ONLY a raw JSON string (no markdown formatting, no ```json codeblocks):
+    Return ONLY a raw JSON object string without markdown code blocks:
     {{
-      "meal_name": "{request.dish_name}",
+      "meal_name": "{dish}",
       "calories": 350,
       "protein_g": 30.0,
       "carbs_g": 2.0,
       "fat_g": 25.0,
-      "tips": "Brief nutritional tip."
+      "tips": "Brief nutritional insight."
     }}
     """
     
     try:
+        # Use updated model identifier
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-1.5-flash',  # or 'gemini-2.0-flash'
             contents=prompt,
         )
         
@@ -398,7 +402,7 @@ def analyze_nutrition(request: NutritionRequest):
         data = json.loads(raw_text)
         return {"status": "success", "data": data}
     except Exception as e:
-        print(f"❌ Gemini AI Live Analysis Error: {e}")
+        print(f"❌ Gemini AI Analysis Error: {e}")
         raise HTTPException(status_code=500, detail=f"Gemini AI Analysis failed: {str(e)}")
 
 @app.post("/api/ai/chat")

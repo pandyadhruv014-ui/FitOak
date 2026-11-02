@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:http/http.dart' as http;
 import '../state/daily_tracker_state.dart';
 import '../services/notification_service.dart';
@@ -14,7 +15,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Global Shared States
   bool isReminderEnabled = true;
   TimeOfDay selectedGymTime = const TimeOfDay(hour: 18, minute: 0);
   List<int> selectedRestDays = [7];
@@ -32,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     dailyTracker.addListener(_updateUi);
     dailyTracker.fetchBackendMeals();
+    dailyTracker.fetchBackendWorkouts();
   }
 
   @override
@@ -86,15 +87,14 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildNavigationCard(
               context,
               title: "2. Progress Overview",
-              subtitle: "Weekly/Monthly Bar & Pie Chart Stats",
+              subtitle: "Weekly Exercises & Chart Stats",
               icon: Icons.bar_chart,
               primaryTextColor: primaryTextColor,
               secondaryTextColor: secondaryTextColor,
-              onTap: () => _openSubPage("2. Progress Overview", _ProgressOverviewSubPage()),
+              onTap: () => _openSubPage("2. Progress Overview", const ProgressOverviewSubPage()),
             ),
             const SizedBox(height: 12),
 
-            // AI NUTRITION ANALYZER CARD (NO SAVE / STATELESS)
             const HomeNutritionAnalyzer(),
             const SizedBox(height: 12),
 
@@ -147,7 +147,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- SUB PAGE 1: TODAY'S PROGRESS ---
   Widget _buildTodaysProgressContent(BuildContext context) {
     final netCalories = (dailyTracker.totalCalories - dailyTracker.totalCaloriesBurned).clamp(0, 10000);
     final theme = Theme.of(context);
@@ -203,7 +202,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- SUB PAGE 3: DAILY REMINDERS & HYDRATION ---
   Widget _buildRemindersAndHydrationContent(BuildContext context) {
     final theme = Theme.of(context);
     final primaryTextColor = theme.colorScheme.onSurface;
@@ -339,7 +337,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- SUB PAGE 4: COMPLETED EXERCISES ---
   Widget _buildCompletedExercisesContent(BuildContext context) {
     final theme = Theme.of(context);
     final primaryTextColor = theme.colorScheme.onSurface;
@@ -349,22 +346,52 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Center(
-                child: Text("No exercises logged yet today.", style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700])),
+                child: Text("No exercises logged yet today.",
+                    style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700])),
               ),
             ),
           )
         : Column(
             children: dailyTracker.workoutLog.map((item) {
+              final workoutId = item['id'];
               List<SetLog> sets = (item['sets'] ?? <SetLog>[]) as List<SetLog>;
-              return Card(
-                margin: const EdgeInsets.symmetric(vertical: 4.0),
-                child: ListTile(
-                  leading: const Icon(Icons.fitness_center, color: Colors.deepOrange),
-                  title: Text("${item['muscle']} - ${item['exercise']}", style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
-                  subtitle: Text("${sets.length} sets logged | Max Weight: ${item['maxWeight']} kg"),
-                  trailing: Text(
-                    "-${item['caloriesBurned']} kcal",
-                    style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold),
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Slidable(
+                  key: Key((workoutId ?? item['exercise']).toString()),
+                  endActionPane: ActionPane(
+                    motion: const ScrollMotion(),
+                    children: [
+                      SlidableAction(
+                        onPressed: (context) async {
+                          if (workoutId != null) {
+                            await dailyTracker.deleteWorkout(workoutId);
+                          } else {
+                            dailyTracker.workoutLog.remove(item);
+                            dailyTracker.refreshUI();
+                          }
+                        },
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        icon: Icons.delete,
+                        label: 'Remove',
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ],
+                  ),
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: ListTile(
+                      leading: const Icon(Icons.fitness_center, color: Colors.deepOrange),
+                      title: Text("${item['muscle']} - ${item['exercise']}",
+                          style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
+                      subtitle: Text(item['details'] ?? "${sets.length} sets logged | Max Weight: ${item['maxWeight']} kg"),
+                      trailing: Text(
+                        "-${item['caloriesBurned']} kcal",
+                        style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ),
                 ),
               );
@@ -413,13 +440,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// --- SUB PAGE 2: PROGRESS OVERVIEW WITH BAR & PIE CHART MODE TOGGLE ---
-class _ProgressOverviewSubPage extends StatefulWidget {
+class ProgressOverviewSubPage extends StatefulWidget {
+  const ProgressOverviewSubPage({super.key});
+
   @override
-  State<_ProgressOverviewSubPage> createState() => _ProgressOverviewSubPageState();
+  State<ProgressOverviewSubPage> createState() => _ProgressOverviewSubPageState();
 }
 
-class _ProgressOverviewSubPageState extends State<_ProgressOverviewSubPage> {
+class _ProgressOverviewSubPageState extends State<ProgressOverviewSubPage> {
   bool isPieChartMode = false;
 
   @override
@@ -427,35 +455,74 @@ class _ProgressOverviewSubPageState extends State<_ProgressOverviewSubPage> {
     final theme = Theme.of(context);
     final primaryTextColor = theme.colorScheme.onSurface;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
               children: [
-                Text(
-                  isPieChartMode ? "Pie Chart View" : "Bar Chart View",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor),
-                ),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text("Pie Chart", style: TextStyle(fontSize: 12, color: theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700])),
-                    const SizedBox(width: 8),
-                    CustomLoadingSwitch(
-                      value: isPieChartMode,
-                      onChanged: (val) => setState(() => isPieChartMode = val),
+                    Text(
+                      isPieChartMode ? "Pie Chart View" : "Bar Chart View",
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor),
                     ),
+                    Row(
+                      children: [
+                        Text("Pie Chart", style: TextStyle(fontSize: 12, color: theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700])),
+                        const SizedBox(width: 8),
+                        CustomLoadingSwitch(
+                          value: isPieChartMode,
+                          onChanged: (val) => setState(() => isPieChartMode = val),
+                        ),
+                      ],
+                    )
                   ],
-                )
+                ),
+                const SizedBox(height: 20),
+                isPieChartMode ? _buildPieChartView() : _buildBarChartView(),
               ],
             ),
-            const SizedBox(height: 20),
-            isPieChartMode ? _buildPieChartView() : _buildBarChartView(),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.date_range, color: Colors.deepOrange, size: 20),
+                    const SizedBox(width: 8),
+                    Text("Weekly Done Exercises", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor)),
+                  ],
+                ),
+                const Divider(height: 20),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: dailyTracker.weeklyProgressData.length,
+                  itemBuilder: (context, index) {
+                    final dayData = dailyTracker.weeklyProgressData[index];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(dayData['day'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                      subtitle: Text("Burned: ${dayData['burned']} kcal | Consumed: ${dayData['consumed']} kcal"),
+                      trailing: const Icon(Icons.check_circle_outline, color: Colors.green, size: 18),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -571,7 +638,6 @@ class _PieChartPainter extends CustomPainter {
       oldDelegate.consumedRatio != consumedRatio;
 }
 
-// --- STATELESS AI NUTRITION ANALYZER CARD (NO BACKEND SAVE) ---
 class HomeNutritionAnalyzer extends StatefulWidget {
   const HomeNutritionAnalyzer({super.key});
 
@@ -583,23 +649,39 @@ class _HomeNutritionAnalyzerState extends State<HomeNutritionAnalyzer> {
   final TextEditingController _controller = TextEditingController();
   Map<String, dynamic>? _result;
   bool _loading = false;
+  String? _errorMessage;
 
   Future<void> _analyze() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
-    setState(() => _loading = true);
+
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
 
     try {
       final res = await http.post(
         Uri.parse('https://backend-um5a.onrender.com/api/ai/nutrition'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'dish_name': text, 'quantity': '1 serving'}),
-      );
+      ).timeout(const Duration(seconds: 45));
+
       if (res.statusCode == 200) {
-        setState(() => _result = json.decode(res.body)['data']);
+        final data = json.decode(res.body)['data'];
+        setState(() {
+          _result = data;
+        });
+      } else {
+        setState(() {
+          _errorMessage = "Server returned status: ${res.statusCode}";
+        });
       }
     } catch (e) {
       debugPrint("Analysis error: $e");
+      setState(() {
+        _errorMessage = "Analysis error: $e";
+      });
     } finally {
       setState(() => _loading = false);
     }
@@ -611,7 +693,10 @@ class _HomeNutritionAnalyzerState extends State<HomeNutritionAnalyzer> {
     final primaryTextColor = theme.colorScheme.onSurface;
 
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.orange.withValues(alpha: 0.3)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -625,7 +710,7 @@ class _HomeNutritionAnalyzerState extends State<HomeNutritionAnalyzer> {
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor)),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -633,9 +718,9 @@ class _HomeNutritionAnalyzerState extends State<HomeNutritionAnalyzer> {
                     controller: _controller,
                     style: TextStyle(color: primaryTextColor),
                     decoration: InputDecoration(
-                      hintText: "e.g., 200g Paneer or 2 Boiled Eggs",
+                      hintText: "e.g., 650g paneer or 4 boiled eggs",
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
                   ),
                 ),
@@ -646,37 +731,47 @@ class _HomeNutritionAnalyzerState extends State<HomeNutritionAnalyzer> {
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange))
-                      : const Icon(Icons.search, color: Colors.orange),
+                      : const Icon(Icons.search, color: Colors.orange, size: 26),
                   onPressed: _loading ? null : _analyze,
                 ),
               ],
             ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+            ],
             if (_result != null) ...[
-              const SizedBox(height: 12),
-              Table(
-                border: TableBorder.all(color: Colors.grey.withValues(alpha: 0.3)),
-                children: [
-                  TableRow(children: [
-                    const Padding(padding: EdgeInsets.all(6), child: Text("Food", style: TextStyle(fontWeight: FontWeight.bold))),
-                    Padding(padding: const EdgeInsets.all(6), child: Text("${_result!['meal_name']}"))
-                  ]),
-                  TableRow(children: [
-                    const Padding(padding: EdgeInsets.all(6), child: Text("Calories", style: TextStyle(fontWeight: FontWeight.bold))),
-                    Padding(padding: const EdgeInsets.all(6), child: Text("${_result!['calories']} kcal"))
-                  ]),
-                  TableRow(children: [
-                    const Padding(padding: EdgeInsets.all(6), child: Text("Protein", style: TextStyle(fontWeight: FontWeight.bold))),
-                    Padding(padding: const EdgeInsets.all(6), child: Text("${_result!['protein_g']}g"))
-                  ]),
-                  TableRow(children: [
-                    const Padding(padding: EdgeInsets.all(6), child: Text("Carbs", style: TextStyle(fontWeight: FontWeight.bold))),
-                    Padding(padding: const EdgeInsets.all(6), child: Text("${_result!['carbs_g']}g"))
-                  ]),
-                  TableRow(children: [
-                    const Padding(padding: EdgeInsets.all(6), child: Text("Fat", style: TextStyle(fontWeight: FontWeight.bold))),
-                    Padding(padding: const EdgeInsets.all(6), child: Text("${_result!['fat_g']}g"))
-                  ]),
-                ],
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                ),
+                child: Table(
+                  border: TableBorder.symmetric(inside: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+                  children: [
+                    TableRow(children: [
+                      const Padding(padding: EdgeInsets.all(8), child: Text("Food Item", style: TextStyle(fontWeight: FontWeight.bold))),
+                      Padding(padding: const EdgeInsets.all(8), child: Text("${_result!['meal_name']}", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold))),
+                    ]),
+                    TableRow(children: [
+                      const Padding(padding: EdgeInsets.all(8), child: Text("Calories", style: TextStyle(fontWeight: FontWeight.bold))),
+                      Padding(padding: const EdgeInsets.all(8), child: Text("${_result!['calories']} kcal")),
+                    ]),
+                    TableRow(children: [
+                      const Padding(padding: EdgeInsets.all(8), child: Text("Protein", style: TextStyle(fontWeight: FontWeight.bold))),
+                      Padding(padding: const EdgeInsets.all(8), child: Text("${_result!['protein_g']}g")),
+                    ]),
+                    TableRow(children: [
+                      const Padding(padding: EdgeInsets.all(8), child: Text("Carbs", style: TextStyle(fontWeight: FontWeight.bold))),
+                      Padding(padding: const EdgeInsets.all(8), child: Text("${_result!['carbs_g']}g")),
+                    ]),
+                    TableRow(children: [
+                      const Padding(padding: EdgeInsets.all(8), child: Text("Fat", style: TextStyle(fontWeight: FontWeight.bold))),
+                      Padding(padding: const EdgeInsets.all(8), child: Text("${_result!['fat_g']}g")),
+                    ]),
+                  ],
+                ),
               ),
             ],
           ],

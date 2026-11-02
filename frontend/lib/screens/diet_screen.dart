@@ -19,13 +19,11 @@ class _DietScreenState extends State<DietScreen> {
   List<dynamic> meals = [];
   bool isLoading = true;
 
-  // Daily Nutritional Goals
   final double calorieGoal = 2200.0;
   final double proteinGoal = 140.0;
   final double carbsGoal = 250.0;
   final double fatGoal = 70.0;
 
-  // Current Totals
   double totalCalories = 0.0;
   double totalProtein = 0.0;
   double totalCarbs = 0.0;
@@ -45,14 +43,10 @@ class _DietScreenState extends State<DietScreen> {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
 
-      debugPrint("🔍 Fetching meals for userId: $userId");
-
       if (userId > 0) {
         final res = await http
             .get(Uri.parse('$backendUrl/api/meals/$userId'))
             .timeout(const Duration(seconds: 30));
-
-        debugPrint("📥 Meals response: ${res.statusCode}");
 
         if (res.statusCode == 200) {
           final data = json.decode(res.body);
@@ -75,35 +69,20 @@ class _DietScreenState extends State<DietScreen> {
               totalFat = f;
             });
           }
-
-          debugPrint("✅ Successfully loaded ${fetchedMeals.length} meals");
-        } else {
-          debugPrint("⚠️ Server returned: ${res.statusCode}");
         }
-      } else {
-        debugPrint("⚠️ Invalid userId: $userId");
       }
     } on TimeoutException catch (e) {
-      debugPrint("⏱️ Timeout loading meals: $e");
+      debugPrint("Timeout loading meals: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("⏱️ Server is waking up... Please wait and try again."),
+            content: Text("Server is waking up... Please wait and try again."),
             backgroundColor: Colors.orange,
-            duration: Duration(seconds: 5),
           ),
         );
       }
     } catch (e) {
-      debugPrint("❌ Error loading meals: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("❌ Error: ${e.toString()}"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      debugPrint("Error loading meals: $e");
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -230,7 +209,7 @@ class _DietScreenState extends State<DietScreen> {
                               if (stateContext.mounted) {
                                 ScaffoldMessenger.of(stateContext).showSnackBar(
                                   const SnackBar(
-                                    content: Text("⚠️ User session expired. Please log in again."),
+                                    content: Text("User session expired. Please log in again."),
                                     backgroundColor: Colors.red,
                                   ),
                                 );
@@ -285,7 +264,7 @@ class _DietScreenState extends State<DietScreen> {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        "✅ Logged ${aiData['meal_name']} (${aiData['calories']} kcal)!",
+                                        "Logged ${aiData['meal_name']} (${aiData['calories']} kcal)!",
                                       ),
                                       backgroundColor: Colors.green,
                                       duration: const Duration(seconds: 3),
@@ -293,19 +272,18 @@ class _DietScreenState extends State<DietScreen> {
                                   );
                                 }
                               } else {
-                                throw Exception("Failed to save meal: ${mealRes.statusCode} - ${mealRes.body}");
+                                throw Exception("Failed to save meal: ${mealRes.statusCode}");
                               }
                             } else {
-                              throw Exception("AI Analysis Failed: ${aiRes.statusCode} - ${aiRes.body}");
+                              throw Exception("AI Analysis Failed: ${aiRes.statusCode}");
                             }
                           } catch (e) {
                             setDialogState(() => isAnalyzing = false);
                             if (stateContext.mounted) {
                               ScaffoldMessenger.of(stateContext).showSnackBar(
                                 SnackBar(
-                                  content: Text("❌ Error: ${e.toString()}"),
+                                  content: Text("Error: ${e.toString()}"),
                                   backgroundColor: Colors.red,
-                                  duration: const Duration(seconds: 5),
                                 ),
                               );
                             }
@@ -394,15 +372,12 @@ class _DietScreenState extends State<DietScreen> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
                   Text(
                     "Today's Meals",
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor),
                   ),
                   const SizedBox(height: 12),
-
                   meals.isEmpty
                       ? Card(
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -447,7 +422,7 @@ class _DietScreenState extends State<DietScreen> {
                                           final res = await http.delete(
                                             Uri.parse('$backendUrl/api/meals/$mealId'),
                                           );
-                                          if (res.statusCode == 200) {
+                                          if (res.statusCode == 200 && mounted) {
                                             await _fetchUserMeals();
                                           }
                                         } catch (e) {

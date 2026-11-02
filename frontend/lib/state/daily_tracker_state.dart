@@ -110,6 +110,10 @@ class DailyTrackerState extends ChangeNotifier {
     checkSavedSession();
   }
 
+  void refreshUI() {
+    notifyListeners();
+  }
+
   void addWaterGlass() {
     waterGlasses++;
     notifyListeners();
