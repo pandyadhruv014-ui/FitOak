@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../state/daily_tracker_state.dart';
@@ -224,8 +225,6 @@ class _DietScreenState extends State<DietScreen> {
                             final prefs = await SharedPreferences.getInstance();
                             final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
 
-                            debugPrint("🔑 Retrieved userId: $userId");
-
                             if (userId <= 0) {
                               setDialogState(() => isAnalyzing = false);
                               if (stateContext.mounted) {
@@ -242,10 +241,6 @@ class _DietScreenState extends State<DietScreen> {
                               return;
                             }
 
-                            // 1. Fetch AI Nutrients
-                            debugPrint("📡 Calling Gemini AI for nutrition analysis...");
-                            debugPrint("📤 Dish: $dish, Quantity: $quantity");
-
                             final aiRes = await http
                                 .post(
                                   Uri.parse('$backendUrl/api/ai/nutrition'),
@@ -257,14 +252,9 @@ class _DietScreenState extends State<DietScreen> {
                                 )
                                 .timeout(const Duration(seconds: 45));
 
-                            debugPrint("📥 AI Response status: ${aiRes.statusCode}");
-                            debugPrint("📥 AI Response body: ${aiRes.body}");
-
                             if (aiRes.statusCode == 200) {
                               final aiData = json.decode(aiRes.body)['data'];
-                              debugPrint("✅ AI analyzed: $aiData");
 
-                              // 2. Persist Meal to PostgreSQL
                               final mealPayload = {
                                 'user_id': userId,
                                 'name': aiData['meal_name'] ?? dish,
@@ -275,8 +265,6 @@ class _DietScreenState extends State<DietScreen> {
                                 'fat': (aiData['fat_g'] ?? 0.0).toDouble(),
                               };
 
-                              debugPrint("📤 Sending meal to backend: $mealPayload");
-
                               final mealRes = await http
                                   .post(
                                     Uri.parse('$backendUrl/api/meals'),
@@ -285,18 +273,11 @@ class _DietScreenState extends State<DietScreen> {
                                   )
                                   .timeout(const Duration(seconds: 30));
 
-                              debugPrint("📥 Meal save status: ${mealRes.statusCode}");
-                              debugPrint("📥 Meal save body: ${mealRes.body}");
-
                               if (mealRes.statusCode == 200 || mealRes.statusCode == 201) {
-                                debugPrint("✅ Meal successfully saved to database!");
-
-                                // Close dialog first
                                 if (stateContext.mounted && Navigator.canPop(stateContext)) {
                                   Navigator.pop(stateContext);
                                 }
 
-                                // Refresh data
                                 await dailyTracker.fetchBackendMeals();
                                 if (mounted) {
                                   await _fetchUserMeals();
@@ -317,20 +298,7 @@ class _DietScreenState extends State<DietScreen> {
                             } else {
                               throw Exception("AI Analysis Failed: ${aiRes.statusCode} - ${aiRes.body}");
                             }
-                          } on TimeoutException catch (e) {
-                            debugPrint("⏱️ Timeout: $e");
-                            setDialogState(() => isAnalyzing = false);
-                            if (stateContext.mounted) {
-                              ScaffoldMessenger.of(stateContext).showSnackBar(
-                                const SnackBar(
-                                  content: Text("⏱️ Request timeout. Server may be waking up. Try again in 30 seconds."),
-                                  backgroundColor: Colors.orange,
-                                  duration: Duration(seconds: 5),
-                                ),
-                              );
-                            }
                           } catch (e) {
-                            debugPrint("❌ Error in meal logging: $e");
                             setDialogState(() => isAnalyzing = false);
                             if (stateContext.mounted) {
                               ScaffoldMessenger.of(stateContext).showSnackBar(
@@ -464,44 +432,76 @@ class _DietScreenState extends State<DietScreen> {
                           itemCount: meals.length,
                           itemBuilder: (context, index) {
                             final meal = meals[index];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 12.0),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                leading: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(alpha: 0.15),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.restaurant_menu, color: Colors.orange),
-                                ),
-                                title: Text(
-                                  meal['name'] ?? 'Meal',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                            final mealId = meal['id'];
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12.0),
+                              child: Slidable(
+                                key: Key(mealId.toString()),
+                                endActionPane: ActionPane(
+                                  motion: const ScrollMotion(),
                                   children: [
-                                    if ((meal['quantity'] ?? '').toString().isNotEmpty)
-                                      Text(
-                                        "Portion: ${meal['quantity']}",
-                                        style: TextStyle(color: secondaryTextColor, fontSize: 12),
-                                      ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      "P: ${meal['protein']}g | C: ${meal['carbs']}g | F: ${meal['fat']}g",
-                                      style: TextStyle(color: secondaryTextColor, fontSize: 12),
+                                    SlidableAction(
+                                      onPressed: (context) async {
+                                        try {
+                                          final res = await http.delete(
+                                            Uri.parse('$backendUrl/api/meals/$mealId'),
+                                          );
+                                          if (res.statusCode == 200) {
+                                            await _fetchUserMeals();
+                                          }
+                                        } catch (e) {
+                                          debugPrint("Error deleting meal: $e");
+                                        }
+                                      },
+                                      backgroundColor: Colors.red,
+                                      foregroundColor: Colors.white,
+                                      icon: Icons.delete,
+                                      label: 'Delete',
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                   ],
                                 ),
-                                trailing: Text(
-                                  "${meal['calories']} kcal",
-                                  style: const TextStyle(
-                                    color: Colors.orange,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                child: Card(
+                                  margin: EdgeInsets.zero,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    leading: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withValues(alpha: 0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.restaurant_menu, color: Colors.orange),
+                                    ),
+                                    title: Text(
+                                      meal['name'] ?? 'Meal',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor),
+                                    ),
+                                    subtitle: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if ((meal['quantity'] ?? '').toString().isNotEmpty)
+                                          Text(
+                                            "Portion: ${meal['quantity']}",
+                                            style: TextStyle(color: secondaryTextColor, fontSize: 12),
+                                          ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          "P: ${meal['protein']}g | C: ${meal['carbs']}g | F: ${meal['fat']}g",
+                                          style: TextStyle(color: secondaryTextColor, fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                    trailing: Text(
+                                      "${meal['calories']} kcal",
+                                      style: const TextStyle(
+                                        color: Colors.orange,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),

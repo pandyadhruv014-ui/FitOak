@@ -366,25 +366,17 @@ def get_user_profile(user_id: int = 1, db: Session = Depends(get_db)):
 @app.post("/api/ai/nutrition")
 def analyze_nutrition(request: NutritionRequest):
     if not gemini_client:
-        return {
-            "status": "success",
-            "data": {
-                "meal_name": request.dish_name,
-                "calories": 320,
-                "protein_g": 24.0,
-                "carbs_g": 35.0,
-                "fat_g": 10.0,
-                "tips": "Gemini API key missing on Render. Returning offline estimate."
-            }
-        }
+        raise HTTPException(
+            status_code=500, 
+            detail="Gemini API client is not configured on the server. Please check your GEMINI_API_KEY environment variable on Render."
+        )
     
     prompt = f"""
-    You are an accurate nutritional database engine.
-    Calculate dynamic macros for:
+    You are an accurate nutritional database engine. Calculate realistic macros for:
     Food Dish: "{request.dish_name}"
     Portion/Quantity: "{request.quantity}"
 
-    Calculate exact nutrients for this portion.
+    Provide accurate, genuine numbers for this exact portion.
     Return ONLY a raw JSON string (no markdown formatting, no ```json codeblocks):
     {{
       "meal_name": "{request.dish_name}",
@@ -392,7 +384,7 @@ def analyze_nutrition(request: NutritionRequest):
       "protein_g": 30.0,
       "carbs_g": 2.0,
       "fat_g": 25.0,
-      "tips": "Balanced protein portion."
+      "tips": "Brief nutritional tip."
     }}
     """
     
@@ -406,17 +398,8 @@ def analyze_nutrition(request: NutritionRequest):
         data = json.loads(raw_text)
         return {"status": "success", "data": data}
     except Exception as e:
-        return {
-            "status": "success",
-            "data": {
-                "meal_name": request.dish_name,
-                "calories": 300,
-                "protein_g": 20.0,
-                "carbs_g": 30.0,
-                "fat_g": 8.0,
-                "tips": f"Offline fallback mode active: {str(e)}"
-            }
-        }
+        print(f"❌ Gemini AI Live Analysis Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Gemini AI Analysis failed: {str(e)}")
 
 @app.post("/api/ai/chat")
 def ai_chat_handler(request: AIChatRequest):
@@ -519,35 +502,21 @@ def get_user_meals(user_id: int, db: Session = Depends(get_db)):
 
 @app.delete("/api/meals/{meal_id}")
 def delete_meal(meal_id: int, db: Session = Depends(get_db)):
-    try:
-        meal = db.query(models.Meal).filter(models.Meal.id == meal_id).first()
-        if not meal:
-            raise HTTPException(status_code=404, detail="Meal not found")
-        db.delete(meal)
-        db.commit()
-        return {"status": "success", "message": "Meal deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Delete meal error: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to delete meal: {str(e)}")
+    meal = db.query(models.Meal).filter(models.Meal.id == meal_id).first()
+    if not meal:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    db.delete(meal)
+    db.commit()
+    return {"status": "success", "message": "Meal deleted successfully"}
 
 @app.delete("/api/workouts/{workout_id}")
 def delete_workout(workout_id: int, db: Session = Depends(get_db)):
-    try:
-        workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
-        if not workout:
-            raise HTTPException(status_code=404, detail="Workout not found")
-        db.delete(workout)
-        db.commit()
-        return {"status": "success", "message": "Workout deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Delete workout error: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to delete workout: {str(e)}")
+    workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    db.delete(workout)
+    db.commit()
+    return {"status": "success", "message": "Workout deleted successfully"}
 
 if __name__ == "__main__":
     import uvicorn

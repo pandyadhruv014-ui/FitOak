@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../state/daily_tracker_state.dart';
 import '../services/notification_service.dart';
 import '../widgets/custom_loading_switch.dart';
@@ -91,6 +93,11 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => _openSubPage("2. Progress Overview", _ProgressOverviewSubPage()),
             ),
             const SizedBox(height: 12),
+
+            // AI NUTRITION ANALYZER CARD (NO SAVE / STATELESS)
+            const HomeNutritionAnalyzer(),
+            const SizedBox(height: 12),
+
             _buildNavigationCard(
               context,
               title: "3. Daily Reminders & Hydration",
@@ -348,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
           )
         : Column(
             children: dailyTracker.workoutLog.map((item) {
-              List<SetLog> sets = item['sets'] as List<SetLog>;
+              List<SetLog> sets = (item['sets'] ?? <SetLog>[]) as List<SetLog>;
               return Card(
                 margin: const EdgeInsets.symmetric(vertical: 4.0),
                 child: ListTile(
@@ -562,4 +569,119 @@ class _PieChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PieChartPainter oldDelegate) =>
       oldDelegate.consumedRatio != consumedRatio;
+}
+
+// --- STATELESS AI NUTRITION ANALYZER CARD (NO BACKEND SAVE) ---
+class HomeNutritionAnalyzer extends StatefulWidget {
+  const HomeNutritionAnalyzer({super.key});
+
+  @override
+  State<HomeNutritionAnalyzer> createState() => _HomeNutritionAnalyzerState();
+}
+
+class _HomeNutritionAnalyzerState extends State<HomeNutritionAnalyzer> {
+  final TextEditingController _controller = TextEditingController();
+  Map<String, dynamic>? _result;
+  bool _loading = false;
+
+  Future<void> _analyze() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _loading = true);
+
+    try {
+      final res = await http.post(
+        Uri.parse('https://backend-um5a.onrender.com/api/ai/nutrition'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'dish_name': text, 'quantity': '1 serving'}),
+      );
+      if (res.statusCode == 200) {
+        setState(() => _result = json.decode(res.body)['data']);
+      }
+    } catch (e) {
+      debugPrint("Analysis error: $e");
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryTextColor = theme.colorScheme.onSurface;
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: Colors.orange, size: 20),
+                const SizedBox(width: 8),
+                Text("Instant AI Nutrition Analyzer",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    style: TextStyle(color: primaryTextColor),
+                    decoration: InputDecoration(
+                      hintText: "e.g., 200g Paneer or 2 Boiled Eggs",
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: _loading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange))
+                      : const Icon(Icons.search, color: Colors.orange),
+                  onPressed: _loading ? null : _analyze,
+                ),
+              ],
+            ),
+            if (_result != null) ...[
+              const SizedBox(height: 12),
+              Table(
+                border: TableBorder.all(color: Colors.grey.withValues(alpha: 0.3)),
+                children: [
+                  TableRow(children: [
+                    const Padding(padding: EdgeInsets.all(6), child: Text("Food", style: TextStyle(fontWeight: FontWeight.bold))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text("${_result!['meal_name']}"))
+                  ]),
+                  TableRow(children: [
+                    const Padding(padding: EdgeInsets.all(6), child: Text("Calories", style: TextStyle(fontWeight: FontWeight.bold))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text("${_result!['calories']} kcal"))
+                  ]),
+                  TableRow(children: [
+                    const Padding(padding: EdgeInsets.all(6), child: Text("Protein", style: TextStyle(fontWeight: FontWeight.bold))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text("${_result!['protein_g']}g"))
+                  ]),
+                  TableRow(children: [
+                    const Padding(padding: EdgeInsets.all(6), child: Text("Carbs", style: TextStyle(fontWeight: FontWeight.bold))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text("${_result!['carbs_g']}g"))
+                  ]),
+                  TableRow(children: [
+                    const Padding(padding: EdgeInsets.all(6), child: Text("Fat", style: TextStyle(fontWeight: FontWeight.bold))),
+                    Padding(padding: const EdgeInsets.all(6), child: Text("${_result!['fat_g']}g"))
+                  ]),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
