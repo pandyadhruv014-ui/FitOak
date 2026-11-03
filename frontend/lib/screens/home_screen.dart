@@ -367,7 +367,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               await NotificationService().scheduleGymReminder(
                                 hour: selectedGymTime.hour,
                                 minute: selectedGymTime.minute,
-                                restDays: selectedRestDays,
                               );
                             } else {
                               await NotificationService().cancelReminders();
@@ -395,7 +394,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               await NotificationService().scheduleGymReminder(
                                 hour: picked.hour,
                                 minute: picked.minute,
-                                restDays: selectedRestDays,
                               );
                             }
                           },
@@ -887,42 +885,56 @@ class _ProgressOverviewSubPageState extends State<ProgressOverviewSubPage> {
             children: dailyTracker.weeklyProgressData.map((data) {
               int consumed = (data['consumed'] as num).toInt();
               int burned = (data['burned'] as num).toInt();
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: (consumed / 3000.0 * 100).clamp(10, 100),
-                        decoration: BoxDecoration(color: Colors.deepOrange, borderRadius: BorderRadius.circular(4)),
-                      ),
-                      const SizedBox(width: 3),
-                      Container(
-                        width: 10,
-                        height: (burned / 1000.0 * 100).clamp(10, 100),
-                        decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(4)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(data['day'], style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                ],
+              return Flexible(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: (consumed / 3000.0 * 100).clamp(10, 100),
+                          decoration: BoxDecoration(color: Colors.deepOrange, borderRadius: BorderRadius.circular(4)),
+                        ),
+                        const SizedBox(width: 3),
+                        Container(
+                          width: 10,
+                          height: (burned / 1000.0 * 100).clamp(10, 100),
+                          decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(4)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(data['day'], style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
+                  ],
+                ),
               );
             }).toList(),
           ),
         ),
         const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          alignment: WrapAlignment.center,
           children: [
-            const Icon(Icons.square, color: Colors.deepOrange, size: 12),
-            const SizedBox(width: 4),
-            Text("Consumed Total: ${dailyTracker.totalCalories} kcal", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(width: 16),
-            const Icon(Icons.square, color: Colors.green, size: 12),
-            const SizedBox(width: 4),
-            Text("Burned Total: ${dailyTracker.totalCaloriesBurned} kcal", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.square, color: Colors.deepOrange, size: 12),
+                const SizedBox(width: 4),
+                Text("Consumed: ${dailyTracker.totalCalories} kcal", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.square, color: Colors.green, size: 12),
+                const SizedBox(width: 4),
+                Text("Burned: ${dailyTracker.totalCaloriesBurned} kcal", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
           ],
         )
       ],

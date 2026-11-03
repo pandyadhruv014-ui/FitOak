@@ -120,6 +120,9 @@ String _getDayOfWeekName(int weekday) {
       'Sunday'
     ];
 
+    final now = DateTime.now();
+    final todayWeekday = now.weekday; // 1 = Monday, 7 = Sunday
+
     return List.generate(7, (index) {
       String fullDay = fullDays[index];
       List<Map<String, dynamic>> dayMeals = weeklyUserDietLog[fullDay] ?? [];
@@ -127,10 +130,17 @@ String _getDayOfWeekName(int weekday) {
       int dayCalories =
           dayMeals.fold(0, (sum, meal) => sum + ((meal['calories'] ?? 0) as int));
 
+      // Check if this day is today
+      bool isToday = (index + 1) == todayWeekday;
+
+      // Only show real data - no fake/placeholder data
+      int burnedCalories = isToday ? totalCaloriesBurned : 0;
+
       return {
-        'day': days[index],
+        'day': isToday ? 'Today' : days[index],
         'consumed': dayCalories,
-        'burned': (index == 0) ? totalCaloriesBurned : 400 + (index * 50),
+        'burned': burnedCalories,
+        'exercises': isToday ? workoutLog : [],
       };
     });
   }
@@ -516,7 +526,11 @@ Future<void> fetchBackendWorkouts() async {
           };
         }).toList();
 
+        // Calculate total calories burned from fetched workouts
+        totalCaloriesBurned = workoutLog.fold(0, (sum, workout) => sum + ((workout['caloriesBurned'] ?? 0) as int));
+
         debugPrint("✅ Fetched ${workouts.length} workouts successfully");
+        debugPrint("📊 Total calories burned today: $totalCaloriesBurned kcal");
         notifyListeners();
         return; // Success - exit the retry loop
       }
@@ -575,6 +589,58 @@ Future<void> fetchBackendWorkouts() async {
     weeklyUserDietLog.forEach((key, value) => value.clear());
     waterGlasses = 0;
     notifyListeners();
+  }
+
+  // --- DELETE USER ACCOUNT ---
+  Future<void> deleteUserAccount(String password) async {
+    if (userId <= 0) {
+      throw Exception("No user logged in");
+    }
+
+    try {
+      debugPrint("🗑️ Attempting to delete account for user_id: $userId");
+
+      final res = await http.delete(
+        Uri.parse('$backendUrl/api/user/delete'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'user_id': userId,
+          'password': password,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (res.statusCode == 200) {
+        debugPrint("✅ Account deleted successfully");
+
+        // Clear all local data
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+
+        isLoggedIn = false;
+        userId = 0;
+        fullName = "";
+        email = "";
+        todayLog.clear();
+        workoutLog.clear();
+        weeklyUserDietLog.forEach((key, value) => value.clear());
+        waterGlasses = 0;
+        totalCaloriesBurned = 0;
+        notifyListeners();
+      } else if (res.statusCode == 401) {
+        throw Exception("Incorrect password. Please try again.");
+      } else if (res.statusCode == 404) {
+        throw Exception("User account not found");
+      } else {
+        final errorData = json.decode(res.body);
+        throw Exception(errorData['detail'] ?? "Failed to delete account");
+      }
+    } on TimeoutException {
+      throw Exception("Request timeout. Please check your connection.");
+    } catch (e) {
+      debugPrint("❌ Delete account error: $e");
+      if (e is Exception) rethrow;
+      throw Exception("Failed to delete account: $e");
+    }
   }
 }
 

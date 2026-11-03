@@ -369,6 +369,49 @@ def get_user_profile(user_id: int = 1, db: Session = Depends(get_db)):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to get user: {str(e)}")
 
+class DeleteAccountRequest(BaseModel):
+    user_id: int
+    password: str
+
+@app.delete("/api/user/delete")
+def delete_user_account(request: DeleteAccountRequest, db: Session = Depends(get_db)):
+    try:
+        sync_database_schema()
+
+        # Verify user exists and password is correct
+        user = db.query(models.User).filter(models.User.id == request.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Verify password
+        if not pwd_context.verify(request.password, user.password):
+            raise HTTPException(
+                status_code=401,
+                detail="Incorrect password. Account deletion cancelled."
+            )
+
+        # Delete user's meals
+        db.query(models.Meal).filter(models.Meal.user_id == request.user_id).delete()
+
+        # Delete user's workouts
+        db.query(models.Workout).filter(models.Workout.user_id == request.user_id).delete()
+
+        # Delete user account
+        db.delete(user)
+        db.commit()
+
+        return {
+            "status": "success",
+            "message": "Account and all associated data deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Delete account error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")
+
 # --- GEMINI AI NUTRITION & CHAT ENDPOINTS ---
 
 class NutritionRequest(BaseModel):

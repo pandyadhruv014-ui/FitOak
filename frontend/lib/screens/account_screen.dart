@@ -176,8 +176,140 @@ class _AccountScreenState extends State<AccountScreen> {
                   },
                 ),
               ),
+              const SizedBox(height: 12),
+
+              // DELETE ACCOUNT ACTION BUTTON
+              Card(
+                color: cardBgColor,
+                elevation: isDark ? 1 : 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.red.shade900.withValues(alpha: 0.6)),
+                ),
+                child: ListTile(
+                  leading: const Icon(Icons.delete_forever, color: Colors.red),
+                  title: const Text('Delete Account Permanently', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                  subtitle: Text('This action cannot be undone', style: TextStyle(color: secondaryTextColor, fontSize: 11)),
+                  onTap: () => _showDeleteAccountDialog(context, isDark, primaryTextColor, secondaryTextColor),
+                ),
+              ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context, bool isDark, Color primaryTextColor, Color? secondaryTextColor) {
+    final TextEditingController passwordController = TextEditingController();
+    bool isDeleting = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.red.withValues(alpha: 0.5)),
+              ),
+              title: Row(
+                children: [
+                  const Icon(Icons.warning, color: Colors.red, size: 28),
+                  const SizedBox(width: 8),
+                  Text('Delete Account?', style: TextStyle(color: primaryTextColor, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'This will permanently delete:',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('• Your profile and account', style: TextStyle(color: secondaryTextColor)),
+                  Text('• All workout history', style: TextStyle(color: secondaryTextColor)),
+                  Text('• All meal logs', style: TextStyle(color: secondaryTextColor)),
+                  Text('• All progress data', style: TextStyle(color: secondaryTextColor)),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Enter your password to confirm:',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    enabled: !isDeleting,
+                    style: TextStyle(color: primaryTextColor),
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      prefixIcon: const Icon(Icons.lock, color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: isDeleting
+                      ? null
+                      : () async {
+                          final password = passwordController.text.trim();
+                          if (password.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter your password')),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() => isDeleting = true);
+
+                          try {
+                            await dailyTracker.deleteUserAccount(password);
+                            if (!context.mounted) return;
+
+                            Navigator.pop(dialogContext);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Account deleted successfully')),
+                            );
+
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(builder: (_) => const AuthGateScreen()),
+                              (route) => false,
+                            );
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            setDialogState(() => isDeleting = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.toString())),
+                            );
+                          }
+                        },
+                  child: isDeleting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('Delete Permanently'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
