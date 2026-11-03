@@ -121,7 +121,7 @@ class _DietScreenState extends State<DietScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Enter food name and quantity—Gemini AI will automatically calculate nutritional macros.",
+                      "Enter food name and quantity—FitOak-AI will automatically calculate nutritional macros.",
                       style: TextStyle(color: secondaryTextColor, fontSize: 12),
                     ),
                     const SizedBox(height: 16),
@@ -158,7 +158,7 @@ class _DietScreenState extends State<DietScreen> {
                           SizedBox(height: 12),
                           Center(
                             child: Text(
-                              "Gemini AI analyzing nutrients...",
+                              "FitOak-AI analyzing nutrients...",
                               style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.w500),
                             ),
                           ),
@@ -275,7 +275,7 @@ class _DietScreenState extends State<DietScreen> {
                                 throw Exception("Failed to save meal: ${mealRes.statusCode}");
                               }
                             } else {
-                              throw Exception("AI Analysis Failed: ${aiRes.statusCode}");
+                              throw Exception("FitOak-AI Analysis Failed: ${aiRes.statusCode}");
                             }
                           } catch (e) {
                             setDialogState(() => isAnalyzing = false);
@@ -393,7 +393,7 @@ class _DietScreenState extends State<DietScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  "Tap 'Log Meal' below to auto-calculate macros with Gemini AI.",
+                                  "Tap 'Log Meal' below to auto-calculate macros with FitOak AI.",
                                   style: TextStyle(color: secondaryTextColor, fontSize: 12),
                                   textAlign: TextAlign.center,
                                 ),

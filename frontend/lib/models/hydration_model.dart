@@ -4,11 +4,11 @@ class HydrationModel extends ChangeNotifier {
   final int _dailyGoalMl = 3000; // Default base goal (3.0 L)
   int _currentIntakeMl = 0;
   bool _isCreatineCycle = false;
-  final int _creatineExtraWaterMl = 1000; // Extra 1.0 L for creatine cycle
+  final int _creatineExtraWaterMl = 2000; // Extra 2.0 L for creatine cycle (updated from 1.0 L)
 
   int get currentIntake => _currentIntakeMl;
   bool get isCreatineCycle => _isCreatineCycle;
-  
+
   // Total target dynamically adjusts based on creatine toggle
   int get targetGoal => _isCreatineCycle ? _dailyGoalMl + _creatineExtraWaterMl : _dailyGoalMl;
 

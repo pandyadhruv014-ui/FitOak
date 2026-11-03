@@ -423,7 +423,7 @@ def analyze_nutrition(request: NutritionRequest):
 
     raise HTTPException(
         status_code=500,
-        detail=f"AI Analysis failed on all models. Details: {last_error}"
+        detail=f"FitOak-AI Analysis failed on all models. Details: {last_error}"
     )
 
 @app.post("/api/ai/chat")
@@ -447,7 +447,7 @@ def ai_chat_handler(request: AIChatRequest):
 
     raise HTTPException(
         status_code=500,
-        detail=f"AI chat failed on all models. Details: {last_error}"
+        detail=f"FitOak-AI chat failed on all models. Details: {last_error}"
     )
 
 # --- POSTGRESQL DATABASE SYNC ENDPOINTS ---

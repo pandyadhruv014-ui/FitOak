@@ -89,32 +89,32 @@ class _HomeScreenState extends State<HomeScreen> {
             // 2. PROGRESS OVERVIEW TILE
             _buildNavigationCard(
               context,
-              title: "2. Progress Overview",
+              title: "Progress Overview",
               subtitle: "Weekly Exercises & Chart Stats",
               icon: Icons.bar_chart,
               primaryTextColor: primaryTextColor,
               secondaryTextColor: secondaryTextColor,
-              onTap: () => _openSubPage("2. Progress Overview", const ProgressOverviewSubPage()),
+              onTap: () => _openSubPage("Progress Overview", const ProgressOverviewSubPage()),
             ),
             const SizedBox(height: 12),
 
             // 3. INSTANT AI NUTRITION ANALYZER TILE
             _buildNavigationCard(
               context,
-              title: "3. Instant AI Nutrition Analyzer",
+              title: "FitOak Nutrition Analyzer",
               subtitle: "Analyze custom dishes & portion macros",
               icon: Icons.auto_awesome,
               primaryTextColor: primaryTextColor,
               secondaryTextColor: secondaryTextColor,
-              onTap: () => _openSubPage("Instant AI Nutrition Analyzer", const NutritionAnalyzerSubPage()),
+              onTap: () => _openSubPage("FitOak Nutrition Analyzer", const NutritionAnalyzerSubPage()),
             ),
             const SizedBox(height: 12),
 
             // 4. DAILY REMINDERS & HYDRATION TILE
             _buildNavigationCard(
               context,
-              title: "4. Daily Reminders & Hydration",
-              subtitle: "Gym Notification Alarm & Creatine Water Tracker",
+              title: "Daily Reminders & Hydration",
+              subtitle: "Gym Remainder & Water Tracker",
               icon: Icons.alarm,
               primaryTextColor: primaryTextColor,
               secondaryTextColor: secondaryTextColor,
@@ -337,7 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'triceps':
         return 'assets/icons/triceps.png';
       default:
-        return null; // Triggers default Icons.directions_run for Cardio
+        return null; 
     }
   }
 

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:sensors_plus/sensors_plus.dart';
 import '../main.dart';
 import '../state/daily_tracker_state.dart';
+import '../services/pedometer_service.dart';
 
 class TrackersTabScreen extends StatefulWidget {
   const TrackersTabScreen({super.key});
@@ -27,6 +28,7 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
   void initState() {
     super.initState();
     dailyTracker.addListener(_onStateChange);
+    _initPedometer();
     _startMotionSensor();
   }
 
@@ -40,6 +42,11 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
 
   void _onStateChange() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _initPedometer() async {
+    await pedometerService.init();
+    pedometerService.addListener(_onStateChange);
   }
 
   void _startMotionSensor() {
@@ -160,12 +167,12 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.sensors, color: _isSensorActive ? Colors.greenAccent : Colors.grey),
+                      Icon(Icons.sensors, color: pedometerService.isInitialized ? Colors.greenAccent : Colors.grey),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          _isSensorActive ? "Built-in Motion Sensor: Active" : "Initializing Hardware Sensors...",
-                          style: TextStyle(fontWeight: FontWeight.bold, color: _isSensorActive ? Colors.greenAccent : Colors.grey),
+                          pedometerService.isInitialized ? "Hardware Pedometer: Active (${pedometerService.pedestrianStatus})" : "Initializing Hardware Sensors...",
+                          style: TextStyle(fontWeight: FontWeight.bold, color: pedometerService.isInitialized ? Colors.greenAccent : Colors.grey),
                         ),
                       ),
                     ],
@@ -174,11 +181,15 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _sensorMetric("Sensor Steps", "${dailyTracker.dailySteps}"),
-                      _sensorMetric("Active Distance", "${dailyTracker.distanceKm.toStringAsFixed(2)} km"),
-                      _sensorMetric("Burned", "${dailyTracker.totalCaloriesBurned} kcal"),
+                      _sensorMetric("Daily Steps", "${pedometerService.dailySteps}"),
+                      _sensorMetric("Distance", "${pedometerService.distanceKm.toStringAsFixed(2)} km"),
+                      _sensorMetric("Calories", "${pedometerService.caloriesBurned} kcal"),
                     ],
                   ),
+                  if (!pedometerService.hasPermission) ...[
+                    const Divider(height: 20),
+                    const Text("⚠️ Activity permission required for pedometer", style: TextStyle(color: Colors.amber, fontSize: 12)),
+                  ],
                 ],
               ),
             ),

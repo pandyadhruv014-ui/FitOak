@@ -375,6 +375,7 @@ Future<void> logUserMeal({
             'exercise': type,
             'duration_mins': durationMins,
             'speed_kmh': durationMins > 0 ? (distance / (durationMins / 60.0)) : 0.0,
+            'calories_burned': calories,
           }),
         );
         if (res.statusCode == 200 || res.statusCode == 201) {
@@ -390,7 +391,9 @@ Future<void> logUserMeal({
         'sets': <SetLog>[],
         'maxWeight': 0.0,
         'caloriesBurned': calories,
-        'details': '$durationMins mins | ${distance.toStringAsFixed(2)} km',
+        'durationMins': durationMins,
+        'distance': distance,
+        'details': '$durationMins mins | ${distance.toStringAsFixed(2)} km | $calories kcal',
       });
       notifyListeners();
     }
@@ -481,13 +484,22 @@ Future<void> fetchBackendWorkouts() async {
         final List workouts = data['workouts'] ?? [];
 
         workoutLog = workouts.map<Map<String, dynamic>>((w) {
+          String workoutType = (w['workout_type'] ?? 'Strength').toString();
+          bool isCardio = workoutType.toLowerCase() == 'cardio';
+
           int count = w['sets_count'] ?? 1;
           double weight = (w['max_weight'] ?? 0.0).toDouble();
+          int durationMins = w['duration_mins'] ?? 0;
+          double speedKmh = (w['speed_kmh'] ?? 0.0).toDouble();
+          int caloriesBurned = w['calories_burned'] ?? 100;
 
           List<SetLog> reconstructedSets = List.generate(
             count,
             (i) => SetLog(setNumber: i + 1, reps: 10, weight: weight),
           );
+
+          // Calculate distance for cardio
+          double distance = isCardio && durationMins > 0 ? (speedKmh * (durationMins / 60.0)) : 0.0;
 
           return {
             'id': w['id'],
@@ -495,7 +507,12 @@ Future<void> fetchBackendWorkouts() async {
             'exercise': w['exercise'] ?? 'Exercise',
             'sets': reconstructedSets,
             'maxWeight': weight,
-            'caloriesBurned': w['calories_burned'] ?? 100,
+            'caloriesBurned': caloriesBurned,
+            'durationMins': durationMins,
+            'distance': distance,
+            'details': isCardio
+                ? '$durationMins mins | ${distance.toStringAsFixed(2)} km | $caloriesBurned kcal'
+                : null,
           };
         }).toList();
 
