@@ -402,7 +402,7 @@ def analyze_nutrition(request: NutritionRequest):
     """
 
     # Use current production model from Google AI Studio
-    candidate_models = ['gemini-3.8-flash', 'gemini-1.5-flash']
+    candidate_models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite']
     last_error = None
 
     for model_name in candidate_models:
@@ -423,7 +423,7 @@ def analyze_nutrition(request: NutritionRequest):
 
     raise HTTPException(
         status_code=500,
-        detail=f"Gemini AI Analysis failed on all models. Details: {last_error}"
+        detail=f"AI Analysis failed on all models. Details: {last_error}"
     )
 
 @app.post("/api/ai/chat")
@@ -432,7 +432,7 @@ def ai_chat_handler(request: AIChatRequest):
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is missing on server.")
 
     # Use current production model from Google AI Studio
-    candidate_models = ['gemini-3.8-flash', 'gemini-1.5-flash']
+    candidate_models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite']
     last_error = None
 
     for model_name in candidate_models:
@@ -447,7 +447,7 @@ def ai_chat_handler(request: AIChatRequest):
 
     raise HTTPException(
         status_code=500,
-        detail=f"Gemini AI chat failed on all models. Details: {last_error}"
+        detail=f"AI chat failed on all models. Details: {last_error}"
     )
 
 # --- POSTGRESQL DATABASE SYNC ENDPOINTS ---
