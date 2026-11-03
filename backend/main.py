@@ -18,6 +18,7 @@ import models
 from database import engine, get_db
 
 load_dotenv()
+app = FastAPI()
 
 # --- Automatic SQL Table & Column Patching ---
 def sync_database_schema():
@@ -364,15 +365,11 @@ def get_user_profile(user_id: int = 1, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get user: {str(e)}")
 
 # --- GEMINI AI NUTRITION & CHAT ENDPOINTS ---
-app = FastAPI()
 
-# Read from Render environment variables (or local .env file)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if not GEMINI_API_KEY:
-    raise RuntimeError("GEMINI_API_KEY environment variable is missing!")
-
-genai.configure(api_key=GEMINI_API_KEY)
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 class NutritionRequest(BaseModel):
     dish_name: str
@@ -386,11 +383,15 @@ def analyze_nutrition(request: NutritionRequest):
     if not dish:
         raise HTTPException(status_code=400, detail="Dish name cannot be empty.")
 
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is missing on server.")
+
     prompt = f"""
-    Calculate estimated nutritional values for:
+    You are an accurate nutritional database engine. Calculate real-time estimated macros for:
     Food: "{dish}", Portion: "{qty}".
 
-    Respond ONLY with a valid JSON object:
+    Provide accurate, genuine numbers for this exact portion.
+    Return ONLY a raw JSON object string without markdown code blocks or extra text:
     {{
       "meal_name": "{dish} ({qty})",
       "calories": 250,
@@ -400,6 +401,7 @@ def analyze_nutrition(request: NutritionRequest):
     }}
     """
 
+    # Primary supported models
     candidate_models = ['gemini-1.5-flash', 'gemini-1.5-pro']
     last_error = None
 
@@ -409,17 +411,19 @@ def analyze_nutrition(request: NutritionRequest):
             response = model.generate_content(prompt)
             raw_text = response.text.strip()
             
+            # Extract JSON object using regex safely
             json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group(0))
                 return {"status": "success", "data": data}
         except Exception as e:
+            print(f"⚠️ Model {model_name} failed: {e}")
             last_error = str(e)
             continue
 
     raise HTTPException(
         status_code=500,
-        detail=f"Gemini API dynamic request failed: {last_error}"
+        detail=f"Gemini AI Analysis failed on all models. Details: {last_error}"
     )
 
 @app.post("/api/ai/chat")

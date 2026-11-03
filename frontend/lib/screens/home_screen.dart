@@ -74,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
+            // 1. TODAY'S PROGRESS TILE
             _buildNavigationCard(
               context,
               title: "Today's progress",
@@ -85,6 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
 
+            // 2. PROGRESS OVERVIEW TILE
             _buildNavigationCard(
               context,
               title: "2. Progress Overview",
@@ -96,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
 
+            // 3. INSTANT AI NUTRITION ANALYZER TILE
             _buildNavigationCard(
               context,
               title: "3. Instant AI Nutrition Analyzer",
@@ -107,6 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
 
+            // 4. DAILY REMINDERS & HYDRATION TILE
             _buildNavigationCard(
               context,
               title: "4. Daily Reminders & Hydration",
@@ -146,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- TODAY'S PROGRESS WITH DEDICATED MUSCLE ICONS ---
+  // --- SUB PAGE 1: TODAY'S PROGRESS ---
   Widget _buildTodaysProgressContent(BuildContext context) {
     final netCalories = (dailyTracker.totalCalories - dailyTracker.totalCaloriesBurned).clamp(0, 10000);
     final theme = Theme.of(context);
@@ -233,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   final muscle = (item['muscle'] ?? '').toString();
                   final isCardio = muscle.toLowerCase() == 'cardio' || item['details'] != null;
 
-                  IconData muscleIcon = _getMuscleIcon(muscle);
+                  final String? assetPath = _getMuscleAssetPath(muscle);
 
                   String subtitleText = "";
                   if (isCardio) {
@@ -271,12 +275,30 @@ class _HomeScreenState extends State<HomeScreen> {
                         margin: EdgeInsets.zero,
                         child: ListTile(
                           leading: Container(
-                            padding: const EdgeInsets.all(8),
+                            width: 42,
+                            height: 42,
+                            padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
                               color: Colors.deepOrange.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Icon(muscleIcon, color: Colors.deepOrange, size: 24),
+                            child: assetPath != null
+                                ? Image.asset(
+                                    assetPath,
+                                    width: 28,
+                                    height: 28,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => const Icon(
+                                      Icons.fitness_center,
+                                      color: Colors.deepOrange,
+                                      size: 24,
+                                    ),
+                                  )
+                                : Icon(
+                                    isCardio ? Icons.directions_run : Icons.fitness_center,
+                                    color: isCardio ? Colors.blueAccent : Colors.deepOrange,
+                                    size: 24,
+                                  ),
                           ),
                           title: Text("${item['muscle']} - ${item['exercise']}",
                               style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
@@ -295,29 +317,27 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Helper method for muscle icon mapping
-  IconData _getMuscleIcon(String muscle) {
-    switch (muscle.toLowerCase()) {
-      case 'chest':
-        return Icons.shield;
-      case 'back':
-        return Icons.swap_vertical_circle;
-      case 'biceps':
-      case 'arms':
-        return Icons.fitness_center;
-      case 'triceps':
-        return Icons.sports_gymnastics;
-      case 'shoulders':
-        return Icons.accessibility_new;
-      case 'legs':
-        return Icons.directions_walk;
+  // Maps target muscle groups to local PNG asset paths, returning null for cardio
+  String? _getMuscleAssetPath(String muscle) {
+    switch (muscle.toLowerCase().trim()) {
       case 'abs':
       case 'core':
-        return Icons.grid_view;
-      case 'cardio':
-        return Icons.directions_run;
+        return 'assets/icons/abs.png';
+      case 'back':
+        return 'assets/icons/back.png';
+      case 'biceps':
+      case 'arms':
+        return 'assets/icons/biceps.png';
+      case 'chest':
+        return 'assets/icons/chest.png';
+      case 'legs':
+        return 'assets/icons/legs.png';
+      case 'shoulders':
+        return 'assets/icons/shoulders.png';
+      case 'triceps':
+        return 'assets/icons/triceps.png';
       default:
-        return Icons.fitness_center;
+        return null; // Triggers default Icons.directions_run for Cardio
     }
   }
 
