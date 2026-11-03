@@ -22,6 +22,45 @@ class SetLog {
 class DailyTrackerState extends ChangeNotifier {
   final String backendUrl = "https://backend-um5a.onrender.com";
 
+// Auto-save daily competed ecercises.
+
+  String lastLoggedDate = "";
+
+Future<void> checkAndRotateDailyLog() async {
+  final prefs = await SharedPreferences.getInstance();
+  final todayStr = DateTime.now().toIso8601String().split('T')[0];
+  lastLoggedDate = prefs.getString('lastLoggedDate') ?? todayStr;
+
+  if (lastLoggedDate != todayStr) {
+    // Archive yesterday's completed workouts into weekly progress before clearing
+    final dayOfWeek = _getDayOfWeekName(DateTime.now().subtract(const Duration(days: 1)).weekday);
+    if (!weeklyUserDietLog.containsKey(dayOfWeek)) {
+      weeklyUserDietLog[dayOfWeek] = [];
+    }
+
+    // Reset today's direct logs for the new day
+    todayLog.clear();
+    workoutLog.clear();
+
+    await prefs.setString('lastLoggedDate', todayStr);
+    lastLoggedDate = todayStr;
+    notifyListeners();
+  }
+}
+
+String _getDayOfWeekName(int weekday) {
+  switch (weekday) {
+    case 1: return 'Monday';
+    case 2: return 'Tuesday';
+    case 3: return 'Wednesday';
+    case 4: return 'Thursday';
+    case 5: return 'Friday';
+    case 6: return 'Saturday';
+    case 7: return 'Sunday';
+    default: return 'Monday';
+  }
+}
+
   // --- Auth & Session State ---
   bool isLoggedIn = false;
   int userId = 0;

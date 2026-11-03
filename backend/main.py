@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import traceback
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, status, Request
@@ -9,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from passlib.context import CryptContext
-from google import genai
+import google.generativeai as genai
 from dotenv import load_dotenv
 
 import database
@@ -363,47 +364,63 @@ def get_user_profile(user_id: int = 1, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get user: {str(e)}")
 
 # --- GEMINI AI NUTRITION & CHAT ENDPOINTS ---
+app = FastAPI()
+
+# Read from Render environment variables (or local .env file)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY environment variable is missing!")
+
+genai.configure(api_key=GEMINI_API_KEY)
+
+class NutritionRequest(BaseModel):
+    dish_name: str
+    quantity: str = "1 serving"
+
 @app.post("/api/ai/nutrition")
 def analyze_nutrition(request: NutritionRequest):
-    if not gemini_client:
-        raise HTTPException(
-            status_code=500, 
-            detail="Gemini API client is not configured on the server."
-        )
-    
-    # Extract dish name and quantity if combined
-    dish = request.dish_name
-    qty = request.quantity if request.quantity else "1 portion"
+    dish = request.dish_name.strip()
+    qty = request.quantity.strip() if request.quantity else "1 portion"
+
+    if not dish:
+        raise HTTPException(status_code=400, detail="Dish name cannot be empty.")
 
     prompt = f"""
-    You are an accurate nutritional database engine. Calculate realistic macros for:
-    Food Query: "{dish}" (Quantity: "{qty}")
+    Calculate estimated nutritional values for:
+    Food: "{dish}", Portion: "{qty}".
 
-    Provide accurate, genuine numbers for this exact portion.
-    Return ONLY a raw JSON object string without markdown code blocks:
+    Respond ONLY with a valid JSON object:
     {{
-      "meal_name": "{dish}",
-      "calories": 350,
-      "protein_g": 30.0,
-      "carbs_g": 2.0,
-      "fat_g": 25.0,
-      "tips": "Brief nutritional insight."
+      "meal_name": "{dish} ({qty})",
+      "calories": 250,
+      "protein_g": 20.0,
+      "carbs_g": 15.0,
+      "fat_g": 8.0
     }}
     """
-    
-    try:
-        # Use updated model identifier
-        response = gemini_client.models.generate_content(
-            model='gemini-1.5-flash',  # or 'gemini-2.0-flash'
-            contents=prompt,
-        )
-        
-        raw_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-        data = json.loads(raw_text)
-        return {"status": "success", "data": data}
-    except Exception as e:
-        print(f"❌ Gemini AI Analysis Error: {e}")
-        raise HTTPException(status_code=500, detail=f"Gemini AI Analysis failed: {str(e)}")
+
+    candidate_models = ['gemini-1.5-flash', 'gemini-1.5-pro']
+    last_error = None
+
+    for model_name in candidate_models:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            raw_text = response.text.strip()
+            
+            json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group(0))
+                return {"status": "success", "data": data}
+        except Exception as e:
+            last_error = str(e)
+            continue
+
+    raise HTTPException(
+        status_code=500,
+        detail=f"Gemini API dynamic request failed: {last_error}"
+    )
 
 @app.post("/api/ai/chat")
 def ai_chat_handler(request: AIChatRequest):

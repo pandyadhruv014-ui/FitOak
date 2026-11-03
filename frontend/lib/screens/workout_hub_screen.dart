@@ -4,7 +4,6 @@ import 'package:http/http.dart' as http;
 import '../main.dart';
 import '../state/daily_tracker_state.dart';
 import '../widgets/custom_loading_switch.dart';
-import 'trackers_screen.dart';
 
 class WorkoutHubScreen extends StatelessWidget {
   const WorkoutHubScreen({super.key});
@@ -39,36 +38,26 @@ class WorkoutHubScreen extends StatelessWidget {
               child: PersonalRecordsScreen(),
             ),
           ),
+
           const SizedBox(height: 12),
           _buildHubCard(
             context,
-            title: '3. Trackers (Nutrition & Sensors)',
-            subtitle: 'Gemini AI nutrition analysis & built-in motion sensor tracking',
-            icon: Icons.track_changes,
-            destination: const ScaffoldPageWrapper(
-              title: '3. Health & Nutrition Trackers',
-              child: TrackersTabScreen(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildHubCard(
-            context,
-            title: '4. Warmup/Stretching',
+            title: '3. Warmup/Stretching',
             subtitle: 'Before and after workout warmups & stretching routines',
             icon: Icons.self_improvement,
             destination: const ScaffoldPageWrapper(
-              title: '4. Warmup/Stretching',
+              title: '3. Warmup/Stretching',
               child: WarmupRoutinesScreen(),
             ),
           ),
           const SizedBox(height: 12),
           _buildHubCard(
             context,
-            title: '5. AI Cardio Sessions',
-            subtitle: 'Treadmill, cycling & endurance tracking with Gemini AI calculations',
+            title: '4. Cardio Sessions',
+            subtitle: 'Treadmill, cycling & endurance tracking',
             icon: Icons.directions_run,
             destination: const ScaffoldPageWrapper(
-              title: '5. Cardio Sessions',
+              title: '4. Cardio Sessions',
               child: CardioSessionsScreen(),
             ),
           ),
@@ -850,7 +839,7 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
         Uri.parse('$baseUrl/api/ai/chat'),
         headers: const {'Content-Type': 'application/json'},
         body: jsonEncode({'prompt': prompt}),
-      ).timeout(const Duration(seconds: 25));
+      ).timeout(const Duration(seconds: 50));
 
       int cals = (duration * 8.5).toInt();
       double dist = (speed * (duration / 60.0));
@@ -902,7 +891,7 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("AI-Powered Cardio Endurance Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
+          Text("Cardio Endurance Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
           const SizedBox(height: 10),
 
           Card(
