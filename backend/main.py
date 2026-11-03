@@ -146,8 +146,13 @@ app.add_middleware(
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-gemini_api_key = os.getenv("GEMINI_API_KEY")
-gemini_client = genai.Client(api_key=gemini_api_key) if gemini_api_key else None
+# Initialize Gemini AI once
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    print(f"✅ Gemini AI configured successfully")
+else:
+    print("⚠️ GEMINI_API_KEY not found in environment")
 
 class UserRegister(BaseModel):
     name: str
@@ -366,11 +371,6 @@ def get_user_profile(user_id: int = 1, db: Session = Depends(get_db)):
 
 # --- GEMINI AI NUTRITION & CHAT ENDPOINTS ---
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-
 class NutritionRequest(BaseModel):
     dish_name: str
     quantity: str = "1 serving"
@@ -428,17 +428,27 @@ def analyze_nutrition(request: NutritionRequest):
 
 @app.post("/api/ai/chat")
 def ai_chat_handler(request: AIChatRequest):
-    if not gemini_client:
-        return {"response": '{"calories": 280, "distance_km": 3.5}'}
-    
-    try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=request.prompt,
-        )
-        return {"response": response.text}
-    except Exception as e:
-        return {"response": '{"calories": 250, "distance_km": 3.0}'}
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is missing on server.")
+
+    # Try multiple models in fallback order
+    candidate_models = ['gemini-1.5-flash', 'gemini-1.5-pro']
+    last_error = None
+
+    for model_name in candidate_models:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(request.prompt)
+            return {"response": response.text}
+        except Exception as e:
+            print(f"⚠️ Model {model_name} failed: {e}")
+            last_error = str(e)
+            continue
+
+    raise HTTPException(
+        status_code=500,
+        detail=f"Gemini AI chat failed on all models. Details: {last_error}"
+    )
 
 # --- POSTGRESQL DATABASE SYNC ENDPOINTS ---
 @app.post("/api/workouts")
