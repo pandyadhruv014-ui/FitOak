@@ -401,8 +401,8 @@ def analyze_nutrition(request: NutritionRequest):
     }}
     """
 
-    # Primary supported models
-    candidate_models = ['gemini-1.5-flash', 'gemini-1.5-pro']
+    # Use models supported by v1beta API
+    candidate_models = ['gemini-2.0-flash-exp', 'gemini-exp-1206', 'gemini-1.5-flash-002']
     last_error = None
 
     for model_name in candidate_models:
@@ -431,8 +431,8 @@ def ai_chat_handler(request: AIChatRequest):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is missing on server.")
 
-    # Try multiple models in fallback order
-    candidate_models = ['gemini-1.5-flash', 'gemini-1.5-pro']
+    # Try multiple models in fallback order (v1beta compatible)
+    candidate_models = ['gemini-2.0-flash-exp', 'gemini-exp-1206', 'gemini-1.5-flash-002']
     last_error = None
 
     for model_name in candidate_models:
