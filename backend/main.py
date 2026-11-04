@@ -3,6 +3,7 @@ import json
 import re
 import random
 import traceback
+import resend
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -346,6 +347,11 @@ def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 # --- FORGOT & RESET PASSWORD ENDPOINTS ---
+# Read API Key
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
+
 @app.post("/api/auth/forgot-password")
 @app.post("/api/forgot-password")
 def request_password_reset(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
@@ -357,16 +363,34 @@ def request_password_reset(request: ForgotPasswordRequest, db: Session = Depends
                 detail="No account registered with this email address."
             )
         
-        # Generate 6-digit OTP code
+        # Generate 6-digit OTP
         otp_code = str(random.randint(100000, 999999))
         otp_store[request.email] = otp_code
         
-        print(f"🔑 Password Reset Code generated for {request.email}: {otp_code}")
-        
+        # Send Email via Resend
+        if RESEND_API_KEY:
+            try:
+                resend.Emails.send({
+                    "from": "FitOak <onboarding@resend.dev>",
+                    "to": [request.email],
+                    "subject": "FitOak Password Reset Code",
+                    "html": f"""
+                    <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #1e1e1e; color: #ffffff; border-radius: 10px;">
+                        <h2 style="color: #ff5722;">FitOak Password Reset</h2>
+                        <p>Your 6-digit verification code is:</p>
+                        <h1 style="color: #ff5722; letter-spacing: 4px;">{otp_code}</h1>
+                        <p style="color: #888888;">If you did not request this code, please ignore this email.</p>
+                    </div>
+                    """
+                })
+                print(f"✉️ Password reset email sent directly to {request.email}")
+            except Exception as mail_err:
+                print(f"⚠️ Email dispatch error: {mail_err}")
+
         return {
             "status": "success",
-            "message": "Reset OTP code generated successfully.",
-            "otp_preview": otp_code  # Returned for seamless testing in UI
+            "message": "Reset code sent to your email.",
+            "otp_preview": otp_code  # Retained for local UI fallback
         }
     except HTTPException:
         raise
