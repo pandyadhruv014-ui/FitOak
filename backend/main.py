@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import random
 import traceback
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, status, Request
@@ -19,6 +20,9 @@ from database import engine, get_db
 
 load_dotenv()
 app = FastAPI()
+
+# In-Memory OTP Store (Email -> {"otp": "123456"})
+otp_store = {}
 
 # --- Automatic SQL Table & Column Patching ---
 def sync_database_schema():
@@ -99,11 +103,10 @@ def sync_database_schema():
     except Exception as e:
         print(f"❌ Database schema sync error: {e}")
         print(traceback.format_exc())
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Starting FitOak Backend...")
-    
-    # Check DATABASE_URL
     db_url = os.getenv("DATABASE_URL", "NOT_SET")
     print(f"📊 DATABASE_URL configured: {db_url[:50]}..." if db_url != "NOT_SET" else "❌ DATABASE_URL NOT SET!")
     
@@ -121,7 +124,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FitOak Backend", lifespan=lifespan)
 
-# Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print(f"❌ Unhandled exception: {exc}")
@@ -146,7 +148,6 @@ app.add_middleware(
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Initialize Gemini AI once
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -169,9 +170,17 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    otp: str
+    new_password: str
+
 class NutritionRequest(BaseModel):
     dish_name: str
-    quantity: str
+    quantity: str = "1 serving"
 
 class AIChatRequest(BaseModel):
     prompt: str
@@ -204,26 +213,19 @@ def read_root():
 def health_check():
     return {"status": "ok", "service": "FitOak FastAPI Engine"}
 
-# NEW: Database diagnostic endpoint
 @app.get("/debug/db-status")
 def debug_db_status():
     try:
         db_url = os.getenv("DATABASE_URL", "NOT_SET")
-        
-        # Test connection
         with engine.connect() as conn:
             result = conn.execute(text("SELECT version();"))
             pg_version = result.fetchone()[0]
-            
-            # Check tables
             tables_result = conn.execute(text("""
                 SELECT table_name 
                 FROM information_schema.tables 
                 WHERE table_schema = 'public';
             """))
             tables = [row[0] for row in tables_result.fetchall()]
-            
-            # Count records
             users_count = conn.execute(text("SELECT COUNT(*) FROM users;")).fetchone()[0]
             meals_count = conn.execute(text("SELECT COUNT(*) FROM meals;")).fetchone()[0]
             workouts_count = conn.execute(text("SELECT COUNT(*) FROM workouts;")).fetchone()[0]
@@ -343,6 +345,68 @@ def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
+# --- FORGOT & RESET PASSWORD ENDPOINTS ---
+@app.post("/api/auth/forgot-password")
+@app.post("/api/forgot-password")
+def request_password_reset(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    try:
+        user = db.query(models.User).filter(models.User.email == request.email).first()
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="No account registered with this email address."
+            )
+        
+        # Generate 6-digit OTP code
+        otp_code = str(random.randint(100000, 999999))
+        otp_store[request.email] = otp_code
+        
+        print(f"🔑 Password Reset Code generated for {request.email}: {otp_code}")
+        
+        return {
+            "status": "success",
+            "message": "Reset OTP code generated successfully.",
+            "otp_preview": otp_code  # Returned for seamless testing in UI
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Forgot password error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate reset code: {str(e)}")
+
+@app.post("/api/auth/reset-password")
+@app.post("/api/reset-password")
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    try:
+        stored_otp = otp_store.get(request.email)
+        if not stored_otp or stored_otp != request.otp.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid or expired OTP verification code."
+            )
+        
+        user = db.query(models.User).filter(models.User.email == request.email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User account not found.")
+        
+        # Update and hash new password
+        user.password = pwd_context.hash(request.new_password)
+        db.commit()
+        
+        # Clear used OTP
+        otp_store.pop(request.email, None)
+        
+        return {
+            "status": "success",
+            "message": "Password updated successfully! Please log in with your new password."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Reset password error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reset password: {str(e)}")
+
 @app.get("/api/user/{user_id}")
 @app.get("/api/auth/me")
 def get_user_profile(user_id: int = 1, db: Session = Depends(get_db)):
@@ -378,25 +442,18 @@ def delete_user_account(request: DeleteAccountRequest, db: Session = Depends(get
     try:
         sync_database_schema()
 
-        # Verify user exists and password is correct
         user = db.query(models.User).filter(models.User.id == request.user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        # Verify password
         if not pwd_context.verify(request.password, user.password):
             raise HTTPException(
                 status_code=401,
                 detail="Incorrect password. Account deletion cancelled."
             )
 
-        # Delete user's meals
         db.query(models.Meal).filter(models.Meal.user_id == request.user_id).delete()
-
-        # Delete user's workouts
         db.query(models.Workout).filter(models.Workout.user_id == request.user_id).delete()
-
-        # Delete user account
         db.delete(user)
         db.commit()
 
@@ -413,11 +470,6 @@ def delete_user_account(request: DeleteAccountRequest, db: Session = Depends(get
         raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")
 
 # --- GEMINI AI NUTRITION & CHAT ENDPOINTS ---
-
-class NutritionRequest(BaseModel):
-    dish_name: str
-    quantity: str = "1 serving"
-
 @app.post("/api/ai/nutrition")
 def analyze_nutrition(request: NutritionRequest):
     dish = request.dish_name.strip()
@@ -444,7 +496,6 @@ def analyze_nutrition(request: NutritionRequest):
     }}
     """
 
-    # Use current production model from Google AI Studio
     candidate_models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite']
     last_error = None
 
@@ -453,8 +504,6 @@ def analyze_nutrition(request: NutritionRequest):
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
             raw_text = response.text.strip()
-            
-            # Extract JSON object using regex safely
             json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group(0))
@@ -474,7 +523,6 @@ def ai_chat_handler(request: AIChatRequest):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is missing on server.")
 
-    # Use current production model from Google AI Studio
     candidate_models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite']
     last_error = None
 

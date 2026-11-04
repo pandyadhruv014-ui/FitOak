@@ -57,6 +57,218 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
     );
   }
 
+  void _showForgotPasswordModal() {
+    final resetEmailController = TextEditingController(text: emailController.text.trim());
+    final otpController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    int resetStep = 1; // Step 1: Email Request, Step 2: OTP Verification & Reset
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (modalContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E1E1E),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.deepOrange.withValues(alpha: 0.4)),
+              ),
+              title: Row(
+                children: [
+                  const Icon(Icons.lock_reset, color: Colors.deepOrange, size: 24),
+                  const SizedBox(width: 8),
+                  Text(
+                    resetStep == 1 ? "Forgot Password" : "Reset Password",
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      resetStep == 1
+                          ? "Enter your registered email address to receive a 6-digit verification code."
+                          : "Enter the 6-digit OTP code and your new account password.",
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    if (resetStep == 1) ...[
+                      TextField(
+                        controller: resetEmailController,
+                        enabled: !isSubmitting,
+                        keyboardType: TextInputType.emailAddress,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: "Registered Email",
+                          labelStyle: TextStyle(color: Colors.grey),
+                          prefixIcon: Icon(Icons.email, color: Colors.deepOrange),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ] else ...[
+                      TextField(
+                        controller: otpController,
+                        enabled: !isSubmitting,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: "6-Digit OTP Code",
+                          labelStyle: TextStyle(color: Colors.grey),
+                          prefixIcon: Icon(Icons.pin, color: Colors.deepOrange),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: newPasswordController,
+                        enabled: !isSubmitting,
+                        obscureText: true,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: "New Password",
+                          labelStyle: TextStyle(color: Colors.grey),
+                          prefixIcon: Icon(Icons.lock_outline, color: Colors.deepOrange),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                    if (isSubmitting) ...[
+                      const SizedBox(height: 16),
+                      const Center(child: CircularProgressIndicator(color: Colors.deepOrange)),
+                    ]
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(modalContext),
+                  child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange),
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final targetEmail = resetEmailController.text.trim();
+                          if (resetStep == 1) {
+                            if (targetEmail.isEmpty) {
+                              ScaffoldMessenger.of(modalContext).showSnackBar(
+                                const SnackBar(content: Text("Please enter your registered email address.")),
+                              );
+                              return;
+                            }
+
+                            setModalState(() => isSubmitting = true);
+
+                            try {
+                              final res = await http.post(
+                                Uri.parse('$baseUrl/api/auth/forgot-password'),
+                                headers: {'Content-Type': 'application/json'},
+                                body: jsonEncode({'email': targetEmail}),
+                              ).timeout(const Duration(seconds: 30));
+
+                              final data = jsonDecode(res.body);
+
+                              if (res.statusCode == 200) {
+                                final previewOtp = data['otp_preview'] ?? '';
+                                if (modalContext.mounted) {
+                                  ScaffoldMessenger.of(modalContext).showSnackBar(
+                                    SnackBar(
+                                      content: Text("OTP Code sent! (Testing preview: $previewOtp)"),
+                                      backgroundColor: Colors.green,
+                                      duration: const Duration(seconds: 5),
+                                    ),
+                                  );
+                                }
+                                setModalState(() {
+                                  resetStep = 2;
+                                  isSubmitting = false;
+                                });
+                              } else {
+                                throw Exception(data['detail'] ?? "Account email not found.");
+                              }
+                            } catch (e) {
+                              setModalState(() => isSubmitting = false);
+                              if (modalContext.mounted) {
+                                ScaffoldMessenger.of(modalContext).showSnackBar(
+                                  SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+                                );
+                              }
+                            }
+                          } else {
+                            final code = otpController.text.trim();
+                            final newPass = newPasswordController.text.trim();
+
+                            if (code.isEmpty || newPass.isEmpty) {
+                              ScaffoldMessenger.of(modalContext).showSnackBar(
+                                const SnackBar(content: Text("Please fill in OTP code and new password.")),
+                              );
+                              return;
+                            }
+
+                            setModalState(() => isSubmitting = true);
+
+                            try {
+                              final res = await http.post(
+                                Uri.parse('$baseUrl/api/auth/reset-password'),
+                                headers: {'Content-Type': 'application/json'},
+                                body: jsonEncode({
+                                  'email': targetEmail,
+                                  'otp': code,
+                                  'new_password': newPass,
+                                }),
+                              ).timeout(const Duration(seconds: 30));
+
+                              final data = jsonDecode(res.body);
+
+                              if (res.statusCode == 200) {
+                                if (modalContext.mounted) {
+                                  Navigator.pop(modalContext);
+                                }
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Password updated successfully! Please log in."),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                  setState(() {
+                                    isLogin = true;
+                                    emailController.text = targetEmail;
+                                    passwordController.clear();
+                                  });
+                                }
+                              } else {
+                                throw Exception(data['detail'] ?? "Invalid OTP or reset error.");
+                              }
+                            } catch (e) {
+                              setModalState(() => isSubmitting = false);
+                              if (modalContext.mounted) {
+                                ScaffoldMessenger.of(modalContext).showSnackBar(
+                                  SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+                                );
+                              }
+                            }
+                          }
+                        },
+                  child: Text(
+                    resetStep == 1 ? "Send Code" : "Update Password",
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _submitAuth() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
@@ -291,7 +503,21 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 24),
+
+                if (isLogin) ...[
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _showForgotPasswordModal,
+                      child: const Text(
+                        "Forgot Password?",
+                        style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 24),
+                ],
 
                 ElevatedButton(
                   onPressed: isLoading ? null : _submitAuth,
