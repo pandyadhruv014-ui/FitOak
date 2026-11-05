@@ -5,7 +5,7 @@ import random
 import traceback
 import resend
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -209,6 +209,39 @@ class MealCreate(BaseModel):
     carbs: float
     fat: float
 
+# --- HELPER: ASYNCHRONOUS SMTP EMAIL DISPATCH ---
+def send_smtp_email_async(to_email: str, otp_code: str):
+    sender_email = os.getenv("SENDER_EMAIL")
+    sender_password = os.getenv("SENDER_PASSWORD")
+    
+    if not sender_email or not sender_password:
+        print("⚠️ SMTP credentials missing on server. Check SENDER_EMAIL and SENDER_PASSWORD env variables.")
+        return
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "FitOak Password Reset Code"
+        msg["From"] = f"FitOak Security <{sender_email}>"
+        msg["To"] = to_email
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #1e1e1e; color: #ffffff; border-radius: 10px;">
+            <h2 style="color: #ff5722;">FitOak Password Reset</h2>
+            <p>Your 6-digit verification code is:</p>
+            <h1 style="color: #ff5722; letter-spacing: 4px;">{otp_code}</h1>
+            <p style="color: #888888;">If you did not request this code, please ignore this email.</p>
+        </div>
+        """
+        msg.attach(MIMEText(html_content, "html"))
+
+        # 10-second timeout prevents network hangs from stalling background thread
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, to_email, msg.as_string())
+        print(f"✉️ Password reset email sent directly to {to_email}")
+    except Exception as mail_err:
+        print(f"⚠️ SMTP background dispatch error: {mail_err}")
+
 @app.get("/")
 def read_root():
     return {"status": "online", "message": "FitOak Backend is running successfully!"}
@@ -352,7 +385,11 @@ def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
 # --- FORGOT & RESET PASSWORD ENDPOINTS ---
 @app.post("/api/auth/forgot-password")
 @app.post("/api/forgot-password")
-def request_password_reset(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+def request_password_reset(
+    request: ForgotPasswordRequest, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     try:
         user = db.query(models.User).filter(models.User.email == request.email).first()
         if not user:
@@ -365,36 +402,12 @@ def request_password_reset(request: ForgotPasswordRequest, db: Session = Depends
         otp_code = str(random.randint(100000, 999999))
         otp_store[request.email] = otp_code
         
-        sender_email = os.getenv("SENDER_EMAIL")
-        sender_password = os.getenv("SENDER_PASSWORD")
-
-        if sender_email and sender_password:
-            try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = "FitOak Password Reset Code"
-                msg["From"] = f"FitOak Security <{sender_email}>"
-                msg["To"] = request.email
-
-                html_content = f"""
-                <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #1e1e1e; color: #ffffff; border-radius: 10px;">
-                    <h2 style="color: #ff5722;">FitOak Password Reset</h2>
-                    <p>Your 6-digit verification code is:</p>
-                    <h1 style="color: #ff5722; letter-spacing: 4px;">{otp_code}</h1>
-                    <p style="color: #888888;">If you did not request this code, please ignore this email.</p>
-                </div>
-                """
-                msg.attach(MIMEText(html_content, "html"))
-
-                with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-                    server.login(sender_email, sender_password)
-                    server.sendmail(sender_email, request.email, msg.as_string())
-                print(f"✉️ Password reset email sent directly to {request.email}")
-            except Exception as mail_err:
-                print(f"⚠️ SMTP dispatch error: {mail_err}")
+        # Schedule asynchronous email dispatch so FastAPI returns a immediate response to Flutter
+        background_tasks.add_task(send_smtp_email_async, request.email, otp_code)
 
         return {
             "status": "success",
-            "message": "Reset code sent to your email.",
+            "message": "Reset code generated and email dispatch scheduled.",
             "otp_preview": otp_code
         }
     except HTTPException:
