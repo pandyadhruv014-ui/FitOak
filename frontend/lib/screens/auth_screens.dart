@@ -170,7 +170,7 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
                                 Uri.parse('$baseUrl/api/auth/forgot-password'),
                                 headers: {'Content-Type': 'application/json'},
                                 body: jsonEncode({'email': targetEmail}),
-                              ).timeout(const Duration(seconds: 30));
+                              ).timeout(const Duration(seconds: 60));
 
                               final data = jsonDecode(res.body);
 
@@ -222,7 +222,7 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
                                   'otp': code,
                                   'new_password': newPass,
                                 }),
-                              ).timeout(const Duration(seconds: 30));
+                              ).timeout(const Duration(seconds: 60));
 
                               final data = jsonDecode(res.body);
 
@@ -311,7 +311,7 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
             headers: const {'Content-Type': 'application/json'},
             body: bodyData,
           )
-          .timeout(const Duration(seconds: 40));
+          .timeout(const Duration(seconds: 60));
 
       if (!mounted) return;
 
