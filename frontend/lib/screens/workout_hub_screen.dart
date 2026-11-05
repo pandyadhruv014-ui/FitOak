@@ -38,7 +38,6 @@ class WorkoutHubScreen extends StatelessWidget {
               child: PersonalRecordsScreen(),
             ),
           ),
-
           const SizedBox(height: 12),
           _buildHubCard(
             context,
@@ -261,7 +260,18 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
       int nextSetNum = currentSets.length + 1;
       double lastWeight = currentSets.isNotEmpty ? currentSets.last.weight : 20.0;
       int lastReps = currentSets.isNotEmpty ? currentSets.last.reps : 10;
-      currentSets.add(SetLog(setNumber: nextSetNum, reps: lastReps, weight: lastWeight));
+
+      // AUTOMATED DROP SET LOGIC: Automatically reduce weight by 20% on added set
+      if (isDropSetMode) {
+        lastWeight = double.parse((lastWeight * 0.80).toStringAsFixed(1));
+      }
+
+      currentSets.add(SetLog(
+        setNumber: nextSetNum,
+        reps: lastReps,
+        weight: lastWeight,
+        isSpecialSet: isDropSetMode,
+      ));
     });
   }
 
@@ -375,7 +385,7 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text("Drop Set Mode", style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
+                          Text("Drop Set Mode (-20% Auto-weight)", style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
                           CustomLoadingSwitch(
                             value: isDropSetMode,
                             onChanged: (val) {
@@ -417,6 +427,7 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: TextFormField(
+                            key: Key('reps_${index}_${setItem.reps}'),
                             initialValue: "${setItem.reps}",
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'Reps', border: OutlineInputBorder(), isDense: true),
@@ -426,6 +437,7 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextFormField(
+                            key: Key('weight_${index}_${setItem.weight}'),
                             initialValue: "${setItem.weight}",
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'Weight (kg)', border: OutlineInputBorder(), isDense: true),
@@ -453,7 +465,10 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
               style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.deepOrange), minimumSize: const Size.fromHeight(42)),
               onPressed: _addSet,
               icon: const Icon(Icons.add, color: Colors.deepOrange),
-              label: const Text("Add Another Set", style: TextStyle(color: Colors.deepOrange)),
+              label: Text(
+                isDropSetMode ? "Add Drop Set (-20% Weight)" : "Add Another Set",
+                style: const TextStyle(color: Colors.deepOrange),
+              ),
             ),
             const SizedBox(height: 20),
 

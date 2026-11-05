@@ -5,12 +5,14 @@ import 'package:http/http.dart' as http;
 import 'state/daily_tracker_state.dart';
 import 'services/notification_service.dart';
 import 'splash_screen.dart';
+import 'services/offline_sync_service.dart';
 
 const String baseUrl = "https://backend-um5a.onrender.com";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService().init();
+  offlineSyncService.init(baseUrl);
   runApp(const FitOakApp());
 }
 

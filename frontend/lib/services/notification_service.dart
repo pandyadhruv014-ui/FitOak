@@ -18,19 +18,25 @@ class NotificationService {
     const initSettings = InitializationSettings(android: androidSettings);
 
     await _notificationsPlugin.initialize(initSettings);
+
+    // Request permissions at runtime for Android 13+ and Exact Alarms
+    final androidImplementation =
+        _notificationsPlugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+
+    if (androidImplementation != null) {
+      await androidImplementation.requestNotificationsPermission();
+      await androidImplementation.requestExactAlarmsPermission();
+    }
   }
 
   /// Schedules gym reminders for Monday-Saturday (excludes Sunday)
-  /// [hour] and [minute]: Time to send the notification
   Future<void> scheduleGymReminder({
     required int hour,
     required int minute,
   }) async {
-    await _notificationsPlugin.cancelAll();
-
     final now = tz.TZDateTime.now(tz.local);
 
-    // Schedule for Monday (1) through Saturday (6), excluding Sunday (7)
     for (int weekday = 1; weekday <= 6; weekday++) {
       var targetTime = _nextInstanceOfWeekday(weekday, hour, minute);
 
@@ -39,7 +45,7 @@ class NotificationService {
       }
 
       await _notificationsPlugin.zonedSchedule(
-        weekday, // Use weekday as notification ID
+        weekday,
         'Time to hit the gym! 🏋️',
         'FitOak Reminder: Push your limits today!',
         targetTime,
@@ -48,7 +54,7 @@ class NotificationService {
             'gym_reminders_channel',
             'Gym Time Reminders',
             channelDescription: 'Daily notifications for scheduled gym workouts',
-            importance: Importance.high,
+            importance: Importance.max,
             priority: Priority.high,
           ),
         ),
@@ -67,7 +73,6 @@ class NotificationService {
   }) async {
     final now = tz.TZDateTime.now(tz.local);
 
-    // Schedule for Monday (1) through Saturday (6), excluding Sunday (7)
     for (int weekday = 1; weekday <= 6; weekday++) {
       var targetTime = _nextInstanceOfWeekday(weekday, hour, minute);
 
@@ -76,7 +81,7 @@ class NotificationService {
       }
 
       await _notificationsPlugin.zonedSchedule(
-        100 + weekday, // Offset ID to avoid conflict with gym reminders
+        100 + weekday,
         'Hydration Reminder 💧',
         'FitOak: Stay hydrated! Drink water to reach your daily goal.',
         targetTime,
@@ -85,7 +90,7 @@ class NotificationService {
             'hydration_reminders_channel',
             'Hydration Reminders',
             channelDescription: 'Daily water intake reminders',
-            importance: Importance.high,
+            importance: Importance.max,
             priority: Priority.high,
           ),
         ),
