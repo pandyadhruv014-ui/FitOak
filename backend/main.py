@@ -210,6 +210,7 @@ class MealCreate(BaseModel):
     fat: float
 
 # --- HELPER: ASYNCHRONOUS SMTP EMAIL DISPATCH ---
+# --- HELPER: ASYNCHRONOUS SMTP EMAIL DISPATCH ---
 def send_smtp_email_async(to_email: str, otp_code: str):
     sender_email = os.getenv("SENDER_EMAIL")
     sender_password = os.getenv("SENDER_PASSWORD")
@@ -234,10 +235,14 @@ def send_smtp_email_async(to_email: str, otp_code: str):
         """
         msg.attach(MIMEText(html_content, "html"))
 
-        # 10-second timeout prevents network hangs from stalling background thread
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
+        # Switch from SMTP_SSL(465) to SMTP(587) + starttls() for cloud compatibility
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as server:
+            server.ehlo()
+            server.starttls()  # Secure the connection
+            server.ehlo()
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, to_email, msg.as_string())
+            
         print(f"✉️ Password reset email sent directly to {to_email}")
     except Exception as mail_err:
         print(f"⚠️ SMTP background dispatch error: {mail_err}")
