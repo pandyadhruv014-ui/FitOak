@@ -14,6 +14,9 @@ from sqlalchemy import text
 from passlib.context import CryptContext
 import google.generativeai as genai
 from dotenv import load_dotenv
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 import database
 import models
@@ -347,11 +350,6 @@ def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 # --- FORGOT & RESET PASSWORD ENDPOINTS ---
-# Read API Key
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-if RESEND_API_KEY:
-    resend.api_key = RESEND_API_KEY
-
 @app.post("/api/auth/forgot-password")
 @app.post("/api/forgot-password")
 def request_password_reset(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
@@ -367,30 +365,37 @@ def request_password_reset(request: ForgotPasswordRequest, db: Session = Depends
         otp_code = str(random.randint(100000, 999999))
         otp_store[request.email] = otp_code
         
-        # Send Email via Resend
-        if RESEND_API_KEY:
+        sender_email = os.getenv("SENDER_EMAIL")
+        sender_password = os.getenv("SENDER_PASSWORD")
+
+        if sender_email and sender_password:
             try:
-                resend.Emails.send({
-                    "from": "FitOak <onboarding@resend.dev>",
-                    "to": [request.email],
-                    "subject": "FitOak Password Reset Code",
-                    "html": f"""
-                    <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #1e1e1e; color: #ffffff; border-radius: 10px;">
-                        <h2 style="color: #ff5722;">FitOak Password Reset</h2>
-                        <p>Your 6-digit verification code is:</p>
-                        <h1 style="color: #ff5722; letter-spacing: 4px;">{otp_code}</h1>
-                        <p style="color: #888888;">If you did not request this code, please ignore this email.</p>
-                    </div>
-                    """
-                })
+                msg = MIMEMultipart("alternative")
+                msg["Subject"] = "FitOak Password Reset Code"
+                msg["From"] = f"FitOak Security <{sender_email}>"
+                msg["To"] = request.email
+
+                html_content = f"""
+                <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #1e1e1e; color: #ffffff; border-radius: 10px;">
+                    <h2 style="color: #ff5722;">FitOak Password Reset</h2>
+                    <p>Your 6-digit verification code is:</p>
+                    <h1 style="color: #ff5722; letter-spacing: 4px;">{otp_code}</h1>
+                    <p style="color: #888888;">If you did not request this code, please ignore this email.</p>
+                </div>
+                """
+                msg.attach(MIMEText(html_content, "html"))
+
+                with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                    server.login(sender_email, sender_password)
+                    server.sendmail(sender_email, request.email, msg.as_string())
                 print(f"✉️ Password reset email sent directly to {request.email}")
             except Exception as mail_err:
-                print(f"⚠️ Email dispatch error: {mail_err}")
+                print(f"⚠️ SMTP dispatch error: {mail_err}")
 
         return {
             "status": "success",
             "message": "Reset code sent to your email.",
-            "otp_preview": otp_code  # Retained for local UI fallback
+            "otp_preview": otp_code
         }
     except HTTPException:
         raise
