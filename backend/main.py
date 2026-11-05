@@ -210,16 +210,17 @@ class MealCreate(BaseModel):
     fat: float
 
 # --- HELPER: ASYNCHRONOUS SMTP EMAIL DISPATCH ---
-# --- HELPER: ASYNCHRONOUS SMTP EMAIL DISPATCH ---
 def send_smtp_email_async(to_email: str, otp_code: str):
     sender_email = os.getenv("SENDER_EMAIL")
     sender_password = os.getenv("SENDER_PASSWORD")
     
+    # 1. Print verification status directly to Render logs
     if not sender_email or not sender_password:
-        print("⚠️ SMTP credentials missing on server. Check SENDER_EMAIL and SENDER_PASSWORD env variables.")
+        print(f"❌ SMTP SKIPPED: Missing environment variables on Render! (SENDER_EMAIL: {bool(sender_email)}, SENDER_PASSWORD: {bool(sender_password)})")
         return
 
     try:
+        print(f"🔄 Attempting to send email from {sender_email} to {to_email} via smtp.gmail.com:587...")
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "FitOak Password Reset Code"
         msg["From"] = f"FitOak Security <{sender_email}>"
@@ -235,17 +236,17 @@ def send_smtp_email_async(to_email: str, otp_code: str):
         """
         msg.attach(MIMEText(html_content, "html"))
 
-        # Switch from SMTP_SSL(465) to SMTP(587) + starttls() for cloud compatibility
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as server:
+        # Port 587 with STARTTLS for cloud compatibility
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
             server.ehlo()
-            server.starttls()  # Secure the connection
+            server.starttls()
             server.ehlo()
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, to_email, msg.as_string())
             
-        print(f"✉️ Password reset email sent directly to {to_email}")
+        print(f"✉️ SUCCESS: Password reset email sent directly to {to_email}")
     except Exception as mail_err:
-        print(f"⚠️ SMTP background dispatch error: {mail_err}")
+        print(f"❌ SMTP ERROR: {mail_err}")
 
 @app.get("/")
 def read_root():
