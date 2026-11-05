@@ -3,7 +3,6 @@ import json
 import re
 import random
 import traceback
-import resend
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, status, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,9 +13,8 @@ from sqlalchemy import text
 from passlib.context import CryptContext
 import google.generativeai as genai
 from dotenv import load_dotenv
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import urllib.request
+import urllib.parse
 
 import database
 import models
@@ -210,53 +208,54 @@ class MealCreate(BaseModel):
     fat: float
 
 # --- HELPER: ASYNCHRONOUS SMTP EMAIL DISPATCH ---
-import socket
-
-# --- HELPER: ASYNCHRONOUS SMTP EMAIL DISPATCH ---
 def send_smtp_email_async(to_email: str, otp_code: str):
-    sender_email = os.getenv("SENDER_EMAIL")
-    sender_password = os.getenv("SENDER_PASSWORD")
-    
-    if not sender_email or not sender_password:
-        print(f"❌ SMTP SKIPPED: Missing environment variables on Render!")
+    api_key = os.getenv("BREVO_API_KEY")
+    sender_email = os.getenv("SENDER_EMAIL", "fitoak.recovery@gmail.com")
+
+    if not api_key:
+        print("❌ HTTPS MAIL SKIPPED: BREVO_API_KEY environment variable is missing on Render!")
         return
 
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": api_key,
+        "content-type": "application/json"
+    }
+
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #1e1e1e; color: #ffffff; border-radius: 10px;">
+        <h2 style="color: #ff5722;">FitOak Password Reset</h2>
+        <p>Your 6-digit verification code is:</p>
+        <h1 style="color: #ff5722; letter-spacing: 4px;">{otp_code}</h1>
+        <p style="color: #888888;">If you did not request this code, please ignore this email.</p>
+    </div>
+    """
+
+    payload = {
+        "sender": {
+            "name": "FitOak Security",
+            "email": sender_email
+        },
+        "to": [
+            {
+                "email": to_email
+            }
+        ],
+        "subject": "FitOak Password Reset Code",
+        "htmlContent": html_content
+    }
+
     try:
-        print(f"🔄 Attempting to send email from {sender_email} to {to_email} via smtp.gmail.com:587 (IPv4)...")
-        
-        # Force IPv4 socket resolution to prevent Render 'Errno 101 Network unreachable'
-        af, socktype, proto, canonname, sa = socket.getaddrinfo(
-            "smtp.gmail.com", 587, socket.AF_INET, socket.SOCK_STREAM
-        )[0]
+        print(f"🔄 Sending email from {sender_email} to {to_email} via HTTPS REST API (Port 443)...")
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "FitOak Password Reset Code"
-        msg["From"] = f"FitOak Security <{sender_email}>"
-        msg["To"] = to_email
-
-        html_content = f"""
-        <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #1e1e1e; color: #ffffff; border-radius: 10px;">
-            <h2 style="color: #ff5722;">FitOak Password Reset</h2>
-            <p>Your 6-digit verification code is:</p>
-            <h1 style="color: #ff5722; letter-spacing: 4px;">{otp_code}</h1>
-            <p style="color: #888888;">If you did not request this code, please ignore this email.</p>
-        </div>
-        """
-        msg.attach(MIMEText(html_content, "html"))
-
-        # Connect directly to the resolved IPv4 address
-        server = smtplib.SMTP(timeout=15)
-        server.connect(sa[0], sa[1])
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.login(sender_email, sender_password)
-        server.sendmail(sender_email, to_email, msg.as_string())
-        server.quit()
-            
-        print(f"✉️ SUCCESS: Password reset email sent directly to {to_email}")
+        with urllib.request.urlopen(req, timeout=15) as response:
+            res_body = response.read().decode("utf-8")
+            print(f"✉️ SUCCESS: Password reset email sent via HTTPS API to {to_email}! Status: {response.status}")
     except Exception as mail_err:
-        print(f"❌ SMTP ERROR: {mail_err}")
+        print(f"❌ HTTPS API ERROR: {mail_err}")
 
 @app.get("/")
 def read_root():
