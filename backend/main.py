@@ -210,17 +210,25 @@ class MealCreate(BaseModel):
     fat: float
 
 # --- HELPER: ASYNCHRONOUS SMTP EMAIL DISPATCH ---
+import socket
+
+# --- HELPER: ASYNCHRONOUS SMTP EMAIL DISPATCH ---
 def send_smtp_email_async(to_email: str, otp_code: str):
     sender_email = os.getenv("SENDER_EMAIL")
     sender_password = os.getenv("SENDER_PASSWORD")
     
-    # 1. Print verification status directly to Render logs
     if not sender_email or not sender_password:
-        print(f"❌ SMTP SKIPPED: Missing environment variables on Render! (SENDER_EMAIL: {bool(sender_email)}, SENDER_PASSWORD: {bool(sender_password)})")
+        print(f"❌ SMTP SKIPPED: Missing environment variables on Render!")
         return
 
     try:
-        print(f"🔄 Attempting to send email from {sender_email} to {to_email} via smtp.gmail.com:587...")
+        print(f"🔄 Attempting to send email from {sender_email} to {to_email} via smtp.gmail.com:587 (IPv4)...")
+        
+        # Force IPv4 socket resolution to prevent Render 'Errno 101 Network unreachable'
+        af, socktype, proto, canonname, sa = socket.getaddrinfo(
+            "smtp.gmail.com", 587, socket.AF_INET, socket.SOCK_STREAM
+        )[0]
+
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "FitOak Password Reset Code"
         msg["From"] = f"FitOak Security <{sender_email}>"
@@ -236,13 +244,15 @@ def send_smtp_email_async(to_email: str, otp_code: str):
         """
         msg.attach(MIMEText(html_content, "html"))
 
-        # Port 587 with STARTTLS for cloud compatibility
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, to_email, msg.as_string())
+        # Connect directly to the resolved IPv4 address
+        server = smtplib.SMTP(timeout=15)
+        server.connect(sa[0], sa[1])
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, to_email, msg.as_string())
+        server.quit()
             
         print(f"✉️ SUCCESS: Password reset email sent directly to {to_email}")
     except Exception as mail_err:
