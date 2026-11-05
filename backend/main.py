@@ -417,13 +417,13 @@ def request_password_reset(
         otp_code = str(random.randint(100000, 999999))
         otp_store[request.email] = otp_code
         
-        # Schedule asynchronous email dispatch so FastAPI returns a immediate response to Flutter
+        # Dispatch email asynchronously in background
         background_tasks.add_task(send_smtp_email_async, request.email, otp_code)
 
+        # Return clean success message without otp_preview
         return {
             "status": "success",
-            "message": "Reset code generated and email dispatch scheduled.",
-            "otp_preview": otp_code
+            "message": "A 6-digit verification code has been sent to your email address."
         }
     except HTTPException:
         raise

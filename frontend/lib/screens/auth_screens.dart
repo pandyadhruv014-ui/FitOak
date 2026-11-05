@@ -175,11 +175,10 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
                               final data = jsonDecode(res.body);
 
                               if (res.statusCode == 200) {
-                                final previewOtp = data['otp_preview'] ?? '';
                                 if (modalContext.mounted) {
                                   ScaffoldMessenger.of(modalContext).showSnackBar(
                                     SnackBar(
-                                      content: Text("OTP Code sent! (Testing preview: $previewOtp)"),
+                                      content: Text(data['message'] ?? 'A 6-digit verification code has been sent to your email address.'),
                                       backgroundColor: Colors.green,
                                       duration: const Duration(seconds: 5),
                                     ),
