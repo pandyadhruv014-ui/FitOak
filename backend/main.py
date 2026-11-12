@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import time
 import random
 import traceback
 from contextlib import asynccontextmanager
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from passlib.context import CryptContext
 import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 from dotenv import load_dotenv
 import urllib.request
 import urllib.parse
@@ -21,9 +23,8 @@ import models
 from database import engine, get_db
 
 load_dotenv()
-app = FastAPI()
 
-# In-Memory OTP Store (Email -> {"otp": "123456"})
+# In-Memory OTP Store (Email -> "123456")
 otp_store = {}
 
 # --- Automatic SQL Table & Column Patching ---
@@ -153,9 +154,55 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    print(f"✅ Gemini AI configured successfully")
+    print("✅ Gemini AI configured successfully")
 else:
     print("⚠️ GEMINI_API_KEY not found in environment")
+
+CANDIDATE_MODELS = [
+    'gemini-3.8-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-flash-latest',
+    'gemini-pro-latest',
+]
+
+def generate_with_resilience(prompt: str, force_json: bool = False) -> str:
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is missing on server.")
+
+    generation_config = genai.GenerationConfig(
+        temperature=0.2 if force_json else 0.7,
+        response_mime_type="application/json" if force_json else "text/plain",
+    )
+
+    last_error = None
+
+    for model_name in CANDIDATE_MODELS:
+        try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                generation_config=generation_config
+            )
+            response = model.generate_content(
+                prompt,
+                request_options={"timeout": 15}
+            )
+            if response and response.text:
+                return response.text.strip()
+        except google_exceptions.ResourceExhausted as rate_err:
+            print(f"⚠️ Model {model_name} rate-limited (429): {rate_err}")
+            last_error = str(rate_err)
+            time.sleep(0.5)
+            continue
+        except Exception as e:
+            print(f"⚠️ Model {model_name} failed: {e}")
+            last_error = str(e)
+            continue
+
+    raise HTTPException(
+        status_code=503,
+        detail=f"FitOak-AI failed on all fallback models. Details: {last_error}"
+    )
 
 class UserRegister(BaseModel):
     name: str
@@ -207,7 +254,7 @@ class MealCreate(BaseModel):
     carbs: float
     fat: float
 
-# --- HELPER: ASYNCHRONOUS SMTP EMAIL DISPATCH ---
+# --- HELPER: ASYNCHRONOUS HTTPS EMAIL DISPATCH ---
 def send_smtp_email_async(to_email: str, otp_code: str):
     api_key = os.getenv("BREVO_API_KEY")
     sender_email = os.getenv("SENDER_EMAIL", "fitoak.recovery@gmail.com")
@@ -535,9 +582,6 @@ def analyze_nutrition(request: NutritionRequest):
     if not dish:
         raise HTTPException(status_code=400, detail="Dish name cannot be empty.")
 
-    if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is missing on server.")
-
     prompt = f"""
     You are an accurate nutritional database engine. Calculate real-time estimated macros for:
     Food: "{dish}", Portion: "{qty}".
@@ -553,50 +597,37 @@ def analyze_nutrition(request: NutritionRequest):
     }}
     """
 
-    candidate_models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite']
-    last_error = None
+    raw_text = generate_with_resilience(prompt, force_json=True)
 
-    for model_name in candidate_models:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            raw_text = response.text.strip()
-            json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group(0))
-                return {"status": "success", "data": data}
-        except Exception as e:
-            print(f"⚠️ Model {model_name} failed: {e}")
-            last_error = str(e)
-            continue
+    try:
+        cleaned = re.sub(r'```json\s*|\s*```', '', raw_text).strip()
+        json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        if not json_match:
+            raise ValueError("No JSON object found in AI response.")
 
-    raise HTTPException(
-        status_code=500,
-        detail=f"FitOak-AI Analysis failed on all models. Details: {last_error}"
-    )
+        data = json.loads(json_match.group(0))
+        sanitized_data = {
+            "meal_name": str(data.get("meal_name", f"{dish} ({qty})")),
+            "calories": int(float(data.get("calories", 0))),
+            "protein_g": round(float(data.get("protein_g", 0.0)), 1),
+            "carbs_g": round(float(data.get("carbs_g", 0.0)), 1),
+            "fat_g": round(float(data.get("fat_g", 0.0)), 1),
+        }
+        return {"status": "success", "data": sanitized_data}
+    except Exception as parse_err:
+        print(f"❌ Nutrition JSON parse error on '{raw_text}': {parse_err}")
+        raise HTTPException(
+            status_code=500,
+            detail="FitOak-AI returned an unexpected format. Please try again."
+        )
 
 @app.post("/api/ai/chat")
 def ai_chat_handler(request: AIChatRequest):
-    if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is missing on server.")
+    if not request.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
 
-    candidate_models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite']
-    last_error = None
-
-    for model_name in candidate_models:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(request.prompt)
-            return {"response": response.text}
-        except Exception as e:
-            print(f"⚠️ Model {model_name} failed: {e}")
-            last_error = str(e)
-            continue
-
-    raise HTTPException(
-        status_code=500,
-        detail=f"FitOak-AI chat failed on all models. Details: {last_error}"
-    )
+    reply = generate_with_resilience(request.prompt, force_json=False)
+    return {"status": "success", "response": reply}
 
 # --- POSTGRESQL DATABASE SYNC ENDPOINTS ---
 @app.post("/api/workouts")
