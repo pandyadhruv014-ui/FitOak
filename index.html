@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FitOak – Power Up! Your Progress (APK)</title>
+  <meta name="description" content="Download FitOak Android APK – Free AI-powered fitness, strength training, drop-set workout logger, and daily calorie &amp; macro tracker built with Flutter and Gemini AI." />
+  <meta name="keywords" content="FitOak, FitOak APK, AI fitness app, workout tracker Android, calorie tracker APK, macro tracker, drop set tracker, gym workout log, Flutter fitness app" />
+  <meta name="author" content="Dhruv Pandya" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://github.com/pandyadhruv014-ui/FitOak" />
+
+  <!-- Open Graph / Facebook / WhatsApp -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="FitOak – Power Up! Your Progress" />
+  <meta property="og:description" content="Track strength sets with automated 20% drop sets, log personal records (PRs), and analyze meal macros instantly with Gemini AI. Download the official Android APK." />
+  <meta property="og:url" content="https://github.com/pandyadhruv014-ui/FitOak" />
+  <meta property="og:site_name" content="FitOak" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="FitOak – Power Up! Your Progress" />
+  <meta name="twitter:description" content="Free AI meal macro analyzer, drop-set strength logger, PR tracker, and smart gym reminders for Android." />
+
+  <!-- SoftwareApplication JSON-LD Schema for Google Rich Snippets -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "FitOak",
+    "operatingSystem": "Android",
+    "applicationCategory": "HealthApplication",
+    "applicationSubCategory": "Fitness & Nutrition Tracker",
+    "softwareVersion": "1.1.0",
+    "datePublished": "2026-11-12",
+    "description": "FitOak is an AI-powered Android fitness and nutrition application featuring instant AI meal macro analysis, strength training with automated 20% drop sets and super sets, personal record (PR) tracking, cardio analytics, and scheduled gym and hydration reminders.",
+    "downloadUrl": "https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0.apk/Fitoak.apk",
+    "installUrl": "https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0.apk/Fitoak.apk",
+    "fileFormat": "application/vnd.android.package-archive",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Dhruv Pandya"
+    },
+    "featureList": [
+      "AI-Powered Meal & Macro Analyzer (Calories, Protein, Carbs, Fat)",
+      "Strength Training Logger across 7 Muscle Groups",
+      "Automated 20% Drop-Set Weight Reduction & Super-Set Pairing",
+      "Personal Record (PR) Tracking & History",
+      "Cardio & Pedometer Step Tracking",
+      "Smart Scheduled Gym & Hydration Reminders"
+    ]
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg-dark: #0e0e0e;
+      --bg-card: #1a1a1a;
+      --bg-card-hover: #222222;
+      --accent: #ff5722;
+      --accent-glow: rgba(255, 87, 34, 0.35);
+      --accent-light: #ff8a50;
+      --text-primary: #ffffff;
+      --text-secondary: #b0b0b0;
+      --border-subtle: rgba(255, 87, 34, 0.28);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    /* Header */
+    header {
+      padding: 20px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(14, 14, 14, 0.92);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+
+    .nav-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, #ff5722, #ff9100);
+      color: #fff;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 1.1rem;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+    }
+
+    .nav-links a:hover {
+      color: var(--accent-light);
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 80px 0 64px;
+      text-align: center;
+      background: radial-gradient(circle at top center, rgba(255, 87, 34, 0.18), transparent 62%);
+    }
+
+    .version-pill {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(255, 87, 34, 0.14);
+      border: 1px solid var(--border-subtle);
+      color: var(--accent-light);
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.1rem, 4.5vw, 3.3rem);
+      font-weight: 800;
+      line-height: 1.18;
+      max-width: 780px;
+      margin: 0 auto 18px;
+    }
+
+    .hero h1 span {
+      background: linear-gradient(90deg, #ff5722, #ff9800);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 1.1rem;
+      color: var(--text-secondary);
+      max-width: 640px;
+      margin: 0 auto 34px;
+    }
+
+    .cta-group {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #ff5722, #e64a19);
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 1.05rem;
+      padding: 15px 30px;
+      border-radius: 12px;
+      box-shadow: 0 8px 26px var(--accent-glow);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(255, 87, 34, 0.5);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      font-weight: 600;
+      font-size: 1rem;
+      padding: 15px 26px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--accent);
+    }
+
+    .meta-note {
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    /* Features Grid */
+    .section {
+      padding: 60px 0;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+
+    .section-subtitle {
+      text-align: center;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto 44px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 22px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 26px;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-3px);
+      background: var(--bg-card-hover);
+    }
+
+    .card-icon {
+      font-size: 1.8rem;
+      margin-bottom: 14px;
+    }
+
+    .card h3 {
+      font-size: 1.2rem;
+      margin-bottom: 10px;
+      color: #ffffff;
+    }
+
+    .card p {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+    }
+
+    /* Installation Steps */
+    .install-box {
+      background: linear-gradient(145deg, #1a1a1a, #141414);
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      padding: 36px;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    .install-box h2 {
+      font-size: 1.65rem;
+      margin-bottom: 18px;
+      color: var(--accent-light);
+    }
+
+    .install-steps {
+      list-style: none;
+      counter-reset: step-counter;
+    }
+
+    .install-steps li {
+      counter-increment: step-counter;
+      position: relative;
+      padding-left: 44px;
+      margin-bottom: 18px;
+      color: var(--text-secondary);
+    }
+
+    .install-steps li::before {
+      content: counter(step-counter);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .install-steps li strong {
+      color: #fff;
+    }
+
+    /* FAQ Section for Long-Tail SEO */
+    .faq-list {
+      max-width: 820px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    details {
+      background: var(--bg-card);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 18px 22px;
+    }
+
+    summary {
+      font-weight: 700;
+      cursor: pointer;
+      color: #fff;
+      font-size: 1.05rem;
+    }
+
+    details p {
+      margin-top: 10px;
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 32px 0;
+      text-align: center;
+      color: #888;
+      font-size: 0.9rem;
+      margin-top: 40px;
+    }
+
+    footer a {
+      color: var(--accent-light);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="container nav-bar">
+      <a href="#" class="brand">
+        <span class="brand-badge">F</span>
+        <span>FitOak</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#install">How to Install</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/pandyadhruv014-ui/FitOak" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero Section -->
+    <section class="hero">
+      <div class="container">
+        <span class="version-pill">Official Release v1.1.0 &bull; Android APK</span>
+        <h1>Train Smarter with <span>FitOak AI</span> & Power Up! Your Progress. </h1>
+        <p>
+          Log strength sets with automated 20% drop-set calculations, track personal records (PRs), and calculate real-time meal macros using AI — all in one fast Android app.
+        </p>
+
+        <div class="cta-group">
+          <a
+            href="https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0.apk/Fitoak.apk"
+            class="btn-primary"
+            rel="noopener"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/>
+            </svg>
+            Download FitOak APK (Android)
+          </a>
+          <a
+            href="https://github.com/pandyadhruv014-ui/FitOak"
+            class="btn-secondary"
+            target="_blank"
+            rel="noopener"
+          >
+            View Source &amp; Releases
+          </a>
+        </div>
+        <p class="meta-note">Free &bull; No Ads &bull; Android 8.0+ &bull; Direct GitHub Release Download</p>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="section">
+      <div class="container">
+        <h2 class="section-title">Everything You Need in One Gym &amp; Nutrition App</h2>
+        <p class="section-subtitle">
+          Engineered for lifters and athletes who want fast workout logging and accurate AI nutrition tracking without clutter.
+        </p>
+
+        <div class="features-grid">
+          <article class="card">
+            <div class="card-icon">🤖</div>
+            <h3>AI Meal &amp; Macro Analyzer</h3>
+            <p>
+              Enter any meal and portion size to get instant calorie, protein, carbohydrate, and fat estimates powered by AI.
+            </p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon">🏋️</div>
+            <h3>Drop Sets &amp; Super Sets</h3>
+            <p>
+              Toggle Drop Set Mode to automatically compute a 20% weight reduction on consecutive sets, or pair exercises in Super Set Mode across 7 muscle groups.
+            </p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon">🏆</div>
+            <h3>Highest PR Records</h3>
+            <p>
+              Automatically updates and stores your all-time personal records (PRs) for Chest, Back, Shoulders, Biceps, Triceps, Legs, and Abs.
+            </p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon">🏃</div>
+            <h3>Cardio &amp; Step Pedometer</h3>
+            <p>
+              Track treadmill, cycling, and rowing sessions alongside real-time daily step count, distance covered, and active calories burned.
+            </p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon">🔔</div>
+            <h3>Smart Gym &amp; Hydration Alerts</h3>
+            <p>
+              Schedule exact Monday–Saturday gym workout alarms and daily water intake reminders so you never miss a training session.
+            </p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon">🧘</div>
+            <h3>Warmup &amp; Cooldown Routines</h3>
+            <p>
+              Follow targeted dynamic warmups before lifting and static stretching routines afterward to prevent injury and improve mobility.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Installation Instructions -->
+    <section id="install" class="section">
+      <div class="container">
+        <div class="install-box">
+          <h2>How to Download &amp; Install FitOak APK on Android</h2>
+          <ol class="install-steps">
+            <li>
+              <strong>Download the APK:</strong> Tap the <em>Download FitOak APK</em> button above to open the latest GitHub Release and download <code>FitOak-v1.0.0-Android.apk</code>.
+            </li>
+            <li>
+              <strong>Allow Unknown Sources:</strong> Open the downloaded APK file from your browser or File Manager. If Android prompts you, tap <em>Settings</em> and enable <em>Allow from this source</em>.
+            </li>
+            <li>
+              <strong>Install &amp; Create Account:</strong> Tap <em>Install</em>, launch FitOak, and register your profile with your height, weight, and fitness goal to begin tracking.
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="section">
+      <div class="container">
+        <h2 class="section-title">Frequently Asked Questions</h2>
+        <p class="section-subtitle">Quick answers about installing and using the FitOak Android application.</p>
+
+        <div class="faq-list">
+          <details>
+            <summary>Is FitOak free to download and use?</summary>
+            <p>Yes. FitOak is completely free to download from GitHub Releases with zero ads or subscription paywalls.</p>
+          </details>
+
+          <details>
+            <summary>How does the AI Nutrition &amp; Calorie Tracker work?</summary>
+            <p>Type the name of any dish and portion size (for example, "100g boiled black chana" or "2 whole eggs"), and FitOak uses AI to calculate calories, protein, carbs, and fats automatically.</p>
+          </details>
+
+          <details>
+            <summary>What Android version is required for the FitOak APK?</summary>
+            <p>FitOak supports Android 8.0 (Oreo) and above, including Android 13, 14, and 15 devices.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>
+        &copy; 2026 FitOak &bull; Built by Dhruv Pandya &bull;
+        <a href="https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0.apk/Fitoak.apk">Download Latest Release</a>
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>
