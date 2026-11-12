@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 class NotificationService {
@@ -10,8 +12,22 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
+  bool _isInitialized = false;
+
   Future<void> init() async {
+    if (_isInitialized) return;
+
+    // 1. Initialize timezone database & bind device's real local timezone (e.g., Asia/Kolkata)
     tz.initializeTimeZones();
+    try {
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+      debugPrint('🕒 Local timezone configured: $timeZoneName');
+    } catch (e) {
+      // Fallback to IST if device timezone lookup fails
+      tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
+      debugPrint('⚠️ Fallback timezone set to Asia/Kolkata: $e');
+    }
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -19,7 +35,7 @@ class NotificationService {
 
     await _notificationsPlugin.initialize(initSettings);
 
-    // Request permissions at runtime for Android 13+ and Exact Alarms
+    // 2. Request Android 13+ notification & Android 12+ exact alarm permissions
     final androidImplementation =
         _notificationsPlugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
@@ -28,6 +44,29 @@ class NotificationService {
       await androidImplementation.requestNotificationsPermission();
       await androidImplementation.requestExactAlarmsPermission();
     }
+
+    _isInitialized = true;
+  }
+
+  /// Immediate test notification to verify permissions & banner display
+  Future<void> sendInstantTestNotification() async {
+    await init();
+    await _notificationsPlugin.show(
+      999,
+      'FitOak Notifications Active ✅',
+      'Your scheduled gym & hydration reminders will appear right here.',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'gym_reminders_v2',
+          'Gym Time Reminders',
+          channelDescription: 'Daily notifications for scheduled gym workouts',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+        ),
+      ),
+    );
   }
 
   /// Schedules gym reminders for Monday-Saturday (excludes Sunday)
@@ -35,12 +74,19 @@ class NotificationService {
     required int hour,
     required int minute,
   }) async {
+    await init();
+
+    // Cancel only existing gym reminder IDs (1..6), preserving hydration reminders
+    for (int weekday = 1; weekday <= 6; weekday++) {
+      await _notificationsPlugin.cancel(weekday);
+    }
+
     final now = tz.TZDateTime.now(tz.local);
 
     for (int weekday = 1; weekday <= 6; weekday++) {
       var targetTime = _nextInstanceOfWeekday(weekday, hour, minute);
 
-      if (targetTime.isBefore(now)) {
+      if (!targetTime.isAfter(now)) {
         targetTime = targetTime.add(const Duration(days: 7));
       }
 
@@ -51,11 +97,13 @@ class NotificationService {
         targetTime,
         const NotificationDetails(
           android: AndroidNotificationDetails(
-            'gym_reminders_channel',
+            'gym_reminders_v2',
             'Gym Time Reminders',
             channelDescription: 'Daily notifications for scheduled gym workouts',
             importance: Importance.max,
             priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -63,6 +111,8 @@ class NotificationService {
             UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
       );
+
+      debugPrint('📅 Scheduled Gym Reminder ID=$weekday for $targetTime (${tz.local.name})');
     }
   }
 
@@ -71,12 +121,18 @@ class NotificationService {
     required int hour,
     required int minute,
   }) async {
+    await init();
+
+    for (int weekday = 1; weekday <= 6; weekday++) {
+      await _notificationsPlugin.cancel(100 + weekday);
+    }
+
     final now = tz.TZDateTime.now(tz.local);
 
     for (int weekday = 1; weekday <= 6; weekday++) {
       var targetTime = _nextInstanceOfWeekday(weekday, hour, minute);
 
-      if (targetTime.isBefore(now)) {
+      if (!targetTime.isAfter(now)) {
         targetTime = targetTime.add(const Duration(days: 7));
       }
 
@@ -87,11 +143,13 @@ class NotificationService {
         targetTime,
         const NotificationDetails(
           android: AndroidNotificationDetails(
-            'hydration_reminders_channel',
+            'hydration_reminders_v2',
             'Hydration Reminders',
             channelDescription: 'Daily water intake reminders',
             importance: Importance.max,
             priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,

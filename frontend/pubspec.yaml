@@ -1,5 +1,5 @@
 name: fitoak
-description: "FitOak - AI-driven fitness and strength coach mobile application."
+description: "FitOak - Power up! Your Progress."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -20,6 +20,7 @@ dependencies:
   flutter_slidable: ^3.1.1
   pedometer: ^4.0.1
   connectivity_plus: ^6.0.0
+  flutter_timezone: ^3.0.1
 
 dev_dependencies:
   flutter_test:

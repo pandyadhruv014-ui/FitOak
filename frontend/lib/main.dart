@@ -5,14 +5,12 @@ import 'package:http/http.dart' as http;
 import 'state/daily_tracker_state.dart';
 import 'services/notification_service.dart';
 import 'splash_screen.dart';
-import 'services/offline_sync_service.dart';
 
 const String baseUrl = "https://backend-um5a.onrender.com";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService().init();
-  offlineSyncService.init(baseUrl);
   runApp(const FitOakApp());
 }
 
@@ -31,12 +29,12 @@ class _FitOakAppState extends State<FitOakApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _requestAppPermissions();
-    _startKeepAlive(); // Start keep-alive pings
+    _startKeepAlive(); // Fires an immediate wake-up ping + 10-min keep-alive
   }
 
   @override
   void dispose() {
-    _keepAliveTimer?.cancel(); // Cancel timer when app closes
+    _keepAliveTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -45,9 +43,9 @@ class _FitOakAppState extends State<FitOakApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       dailyTracker.checkSavedSession();
-      _startKeepAlive(); // Restart keep-alive when app resumes
+      _startKeepAlive(); // Immediately wake server when returning to app
     } else if (state == AppLifecycleState.paused) {
-      _keepAliveTimer?.cancel(); // Stop pinging when app is in background
+      _keepAliveTimer?.cancel();
     }
   }
 
@@ -60,27 +58,35 @@ class _FitOakAppState extends State<FitOakApp> with WidgetsBindingObserver {
     ].request();
   }
 
-  // Keep-Alive Function to prevent Render backend from sleeping
-  void _startKeepAlive() {
-    _keepAliveTimer?.cancel(); // Cancel existing timer if any
-    
-    _keepAliveTimer = Timer.periodic(const Duration(minutes: 10), (timer) async {
-      try {
-        final response = await http
-            .get(Uri.parse('$baseUrl/health'))
-            .timeout(const Duration(seconds: 10));
-        
-        if (response.statusCode == 200) {
-          debugPrint("🏓 Keep-alive ping successful - Server is awake");
-        } else {
-          debugPrint("🏓 Keep-alive ping returned status: ${response.statusCode}");
-        }
-      } catch (e) {
-        debugPrint("🏓 Keep-alive ping failed: $e");
+  Future<void> _pingServerHealth() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/health'))
+          .timeout(const Duration(seconds: 60));
+
+      if (response.statusCode == 200) {
+        debugPrint("🏓 Keep-alive ping successful - Server is awake");
+      } else {
+        debugPrint("🏓 Keep-alive ping returned status: ${response.statusCode}");
       }
+    } catch (e) {
+      debugPrint("🏓 Keep-alive ping failed: $e");
+    }
+  }
+
+  // Wakes Render immediately on launch/resume, then pings every 10 minutes
+  void _startKeepAlive() {
+    _keepAliveTimer?.cancel();
+
+    // 1. Fire an immediate non-blocking ping right now (0 Gemini quota used)
+    _pingServerHealth();
+
+    // 2. Keep the container warm while the app stays active
+    _keepAliveTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      _pingServerHealth();
     });
-    
-    debugPrint("✅ Keep-alive timer started (pings every 10 minutes)");
+
+    debugPrint("✅ Keep-alive started (immediate wake-up + 10-min interval)");
   }
 
   @override
@@ -92,7 +98,7 @@ class _FitOakAppState extends State<FitOakApp> with WidgetsBindingObserver {
           title: 'FitOak',
           debugShowCheckedModeBanner: false,
           themeMode: dailyTracker.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-          
+
           // DARK THEME CONFIGURATION
           darkTheme: ThemeData.dark().copyWith(
             scaffoldBackgroundColor: const Color(0xFF121212),
