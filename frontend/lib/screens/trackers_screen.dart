@@ -333,7 +333,7 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   DropdownButtonFormField<String>(
-                    value: selectedMuscle,
+                    initialValue: selectedMuscle,
                     items: const [
                       'Chest',
                       'Back',

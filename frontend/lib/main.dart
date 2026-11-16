@@ -2,15 +2,22 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'state/daily_tracker_state.dart';
 import 'services/notification_service.dart';
+import 'services/fcm_service.dart';
 import 'splash_screen.dart';
 
 const String baseUrl = "https://backend-um5a.onrender.com";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   await NotificationService().init();
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  await FcmService.instance.init();
+  await FcmService.instance.syncTokenWithBackend();
   runApp(const FitOakApp());
 }
 
@@ -43,6 +50,7 @@ class _FitOakAppState extends State<FitOakApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       dailyTracker.checkSavedSession();
+      FcmService.instance.syncTokenWithBackend();
       _startKeepAlive(); // Immediately wake server when returning to app
     } else if (state == AppLifecycleState.paused) {
       _keepAliveTimer?.cancel();

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "175880247825",
+    "project_id": "fitoak",
+    "storage_bucket": "fitoak.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:175880247825:android:44e0cf19f42b2a2fcdafb0",
+        "android_client_info": {
+          "package_name": "com.example.fitoak"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4JF8ckB7U_xu9Gld3jTABeszIpmGnbPU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

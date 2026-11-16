@@ -18,13 +18,26 @@ import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
 from dotenv import load_dotenv
 import urllib.request
-from pydantic import BaseModel
+import firebase_admin
+from firebase_admin import credentials, messaging
 
 import database
 import models
 from database import engine, get_db
 
 load_dotenv()
+
+# --- Initialize Firebase Admin SDK from Render Env Var ---
+if not firebase_admin._apps:
+    firebase_creds_raw = os.getenv("FIREBASE_CREDENTIALS_JSON", "").strip()
+    if firebase_creds_raw:
+        try:
+            cred_dict = json.loads(firebase_creds_raw)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase Admin SDK initialized for FCM push notifications.")
+        except Exception as fb_err:
+            print(f"❌ Firebase Admin SDK init error: {fb_err}")
 
 otp_store = {}
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -51,6 +64,12 @@ def sync_database_schema():
         goal VARCHAR(255) DEFAULT '',
         is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS user_fcm_tokens (
+        user_id INTEGER PRIMARY KEY,
+        fcm_token TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS workouts (
@@ -336,6 +355,10 @@ class GroupMessageCreate(BaseModel):
     user_name: str
     message: str
 
+class FcmTokenPayload(BaseModel):
+    user_id: int
+    fcm_token: str
+
 # --- Email Helper ---
 def send_smtp_email_async(to_email: str, otp_code: str):
     api_key = os.getenv("BREVO_API_KEY")
@@ -372,6 +395,90 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "FitOak FastAPI Engine", "ist_date": get_ist_today_str()}
+
+# --- FCM TOKEN & PUSH NOTIFICATION HELPERS ---
+@app.post("/api/users/fcm-token")
+def register_fcm_token(payload: FcmTokenPayload):
+    token = payload.fcm_token.strip()
+    if payload.user_id <= 0 or not token:
+        raise HTTPException(status_code=400, detail="Invalid user_id or FCM token.")
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_fcm_tokens (
+                user_id INTEGER PRIMARY KEY,
+                fcm_token TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(
+            text("""
+                INSERT INTO user_fcm_tokens (user_id, fcm_token, updated_at)
+                VALUES (:uid, :tok, :ts)
+                ON CONFLICT (user_id)
+                DO UPDATE SET fcm_token = EXCLUDED.fcm_token, updated_at = EXCLUDED.updated_at
+            """),
+            {"uid": payload.user_id, "tok": token, "ts": get_ist_now()},
+        )
+    return {"status": "registered"}
+
+def _send_group_push_notification(
+    conn,
+    group_id: int,
+    sender_id: int,
+    sender_name: str,
+    message_text: str,
+):
+    if not firebase_admin._apps:
+        return
+
+    group_row = conn.execute(
+        text("SELECT group_name FROM gym_groups WHERE id = :gid"),
+        {"gid": group_id},
+    ).fetchone()
+    group_name = group_row[0] if group_row else "Gym Squad"
+
+    token_rows = conn.execute(
+        text("""
+            SELECT DISTINCT t.fcm_token
+            FROM gym_group_members m
+            JOIN user_fcm_tokens t ON m.user_id = t.user_id
+            WHERE m.group_id = :gid
+              AND m.user_id != :sender_id
+              AND t.fcm_token IS NOT NULL
+              AND t.fcm_token != ''
+        """),
+        {"gid": group_id, "sender_id": sender_id},
+    ).fetchall()
+
+    tokens = [r[0] for r in token_rows]
+    if not tokens:
+        return
+
+    multicast_msg = messaging.MulticastMessage(
+        notification=messaging.Notification(
+            title=f"{sender_name} • {group_name}",
+            body=message_text,
+        ),
+        data={
+            "type": "group_message",
+            "group_id": str(group_id),
+            "sender_id": str(sender_id),
+        },
+        android=messaging.AndroidConfig(
+            priority="high",
+            notification=messaging.AndroidNotification(
+                channel_id="gym_squad_chat_channel",
+                sound="default",
+            ),
+        ),
+        tokens=tokens,
+    )
+
+    try:
+        messaging.send_each_for_multicast(multicast_msg)
+    except Exception as fcm_err:
+        print(f"⚠️ FCM push failed: {fcm_err}")
 
 # --- AUTHENTICATION ENDPOINTS ---
 @app.post("/api/register")
@@ -472,6 +579,7 @@ def delete_user_account(request: DeleteAccountRequest, db: Session = Depends(get
     db.query(models.Workout).filter(models.Workout.user_id == request.user_id).delete()
     db.execute(text("DELETE FROM water_logs WHERE user_id = :uid"), {"uid": request.user_id})
     db.execute(text("DELETE FROM gym_group_members WHERE user_id = :uid"), {"uid": request.user_id})
+    db.execute(text("DELETE FROM user_fcm_tokens WHERE user_id = :uid"), {"uid": request.user_id})
     db.delete(user)
     db.commit()
     return {"status": "success", "message": "Account and all associated data deleted successfully"}
@@ -519,7 +627,7 @@ def ai_chat_handler(request: AIChatRequest):
     reply = generate_with_resilience(request.prompt, force_json=False)
     return {"status": "success", "response": reply}
 
-# --- DATE-FILTERED MEALS ENDPOINTS (Fixes New-Day Reset Bug) ---
+# --- DATE-FILTERED MEALS ENDPOINTS ---
 @app.post("/api/meals")
 def create_meal(meal: MealCreate, db: Session = Depends(get_db)):
     target_date = meal.log_date if meal.log_date else get_ist_today_str()
@@ -606,7 +714,6 @@ def create_workout(workout: WorkoutCreate, db: Session = Depends(get_db)):
             fat_loss = 0.0
 
         now_ist = get_ist_now()
-        # Insert for primary user
         res = db.execute(
             text("""
                 INSERT INTO workouts (
@@ -639,7 +746,6 @@ def create_workout(workout: WorkoutCreate, db: Session = Depends(get_db)):
         )
         created_row = dict(res.fetchone()._mapping)
 
-        # Also log identical exercise for any selected gym buddies
         unique_buddies = {bid for bid in workout.buddy_user_ids if bid > 0 and bid != workout.user_id}
         logger_label = workout.logged_by_name.strip() or f"Buddy #{workout.user_id}"
         for buddy_id in unique_buddies:
@@ -910,13 +1016,7 @@ def _build_group_payload(db: Session, group_id: int) -> dict:
         "members": [{"user_id": m.user_id, "user_name": m.user_name} for m in members],
     }
 
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
-
-#--Group Chat Endpoints--#
-
+# --- GROUP CHAT ENDPOINTS + FCM PUSH NOTIFICATIONS ---
 @app.get("/api/groups/{group_id}/messages")
 def get_group_messages(group_id: int, limit: int = 100):
     with engine.begin() as conn:
@@ -983,6 +1083,15 @@ def post_group_message(group_id: int, payload: GroupMessageCreate):
                 "msg": text_msg,
             },
         ).fetchone()
+
+        _send_group_push_notification(
+            conn=conn,
+            group_id=group_id,
+            sender_id=payload.user_id,
+            sender_name=payload.user_name,
+            message_text=text_msg,
+        )
+
         return {
             "status": "sent",
             "message": {
@@ -994,3 +1103,8 @@ def post_group_message(group_id: int, payload: GroupMessageCreate):
                 "created_at": row[1].isoformat() if row[1] else "",
             },
         }
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

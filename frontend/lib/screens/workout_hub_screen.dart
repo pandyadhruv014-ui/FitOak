@@ -154,7 +154,7 @@ class _BmiAndCalorieTargetScreenState extends State<BmiAndCalorieTargetScreen> {
 
   String _gender = 'Male';
   String _activityLevel = 'Moderate (3-5 days/week)';
-  String _selectedGoal = 'Muscle Gain / Lean Bulk';
+  String _selectedGoal = 'Muscle Gain / Lean Bulk (+300 kcal)';
 
   final Map<String, double> _activityMultipliers = {
     'Sedentary (Desk job / little exercise)': 1.2,

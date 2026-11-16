@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../state/daily_tracker_state.dart';
+import '../services/fcm_service.dart';
 import 'main_app_shell.dart';
 
 class AuthGateScreen extends StatefulWidget {
@@ -343,7 +344,7 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
           debugPrint("📝 Stored userId: $resolvedId");
           debugPrint("📝 Stored name: $resolvedName");
           debugPrint("📝 Stored email: $resolvedEmail");
-          
+
           final testPrefs = await SharedPreferences.getInstance();
           final savedUserId = testPrefs.getInt('userId');
           debugPrint("🔍 Verification - userId from prefs: $savedUserId");
@@ -352,6 +353,10 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
         if (!mounted) return;
 
         if (isLogin) {
+          // Register FCM device token for push notifications right after login
+          await FcmService.instance.syncTokenWithBackend();
+
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               backgroundColor: Colors.green,
