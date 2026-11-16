@@ -78,13 +78,19 @@ class DailyTrackerState extends ChangeNotifier {
   int userId = 0;
   String dob = "";
 
-  // --- Profile Data ---
+  // --- Profile & BMI / Calorie Goal Data ---
   String fullName = "Dhruv Pandya";
   String email = "user@fitoak.com";
-  int age = 22;
+  int age = 23;
+  String gender = "Male";
   double heightCm = 178;
   double weightKg = 72;
-  String fitnessGoal = "Build Muscle";
+  String activityLevel = "Moderate (3-5 days/week)";
+  String fitnessGoal = "Muscle Gain / Lean Bulk";
+  int dailyCalorieGoal = 2600;
+  int dailyProteinGoal = 150;
+  int dailyCarbsGoal = 300;
+  int dailyFatGoal = 75;
   bool isDarkMode = true;
 
   // --- Health Sensor Integration ---
@@ -93,13 +99,14 @@ class DailyTrackerState extends ChangeNotifier {
   double distanceKm = 0.0;
   int totalCaloriesBurned = 0;
 
-  // --- Water Intake Tracker (Today + Weekly) ---
+  // --- Water Intake Tracker (Today + Weekly, Minimum 4.00 L = 16 glasses) ---
   int waterGlasses = 0;
-  final int waterGoalGlasses = 12;
+  final int waterGoalGlasses = 16;
   List<Map<String, dynamic>> weeklyWaterData = [];
 
-  // --- Gym Buddy Group State ---
+  // --- Gym Buddy Group & Squad Chat State ---
   Map<String, dynamic>? activeGymGroup;
+  List<Map<String, dynamic>> squadMessages = [];
 
   // --- Today's Direct Log ---
   List<Map<String, dynamic>> todayLog = [];
@@ -169,6 +176,45 @@ class DailyTrackerState extends ChangeNotifier {
   }
 
   void refreshUI() => notifyListeners();
+
+  // --- SAVE BMI & GOAL CALORIE TARGETS ---
+  Future<void> updateCalorieAndBmiTargets({
+    required double height,
+    required double weight,
+    required int userAge,
+    required String userGender,
+    required String activity,
+    required String goal,
+    required int calorieTarget,
+    required int proteinTarget,
+    required int carbsTarget,
+    required int fatTarget,
+  }) async {
+    heightCm = height;
+    weightKg = weight;
+    age = userAge;
+    gender = userGender;
+    activityLevel = activity;
+    fitnessGoal = goal;
+    dailyCalorieGoal = calorieTarget;
+    dailyProteinGoal = proteinTarget;
+    dailyCarbsGoal = carbsTarget;
+    dailyFatGoal = fatTarget;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('heightCm', heightCm);
+    await prefs.setDouble('weightKg', weightKg);
+    await prefs.setInt('userAge', age);
+    await prefs.setString('userGender', gender);
+    await prefs.setString('activityLevel', activityLevel);
+    await prefs.setString('fitnessGoal', fitnessGoal);
+    await prefs.setInt('dailyCalorieGoal', dailyCalorieGoal);
+    await prefs.setInt('dailyProteinGoal', dailyProteinGoal);
+    await prefs.setInt('dailyCarbsGoal', dailyCarbsGoal);
+    await prefs.setInt('dailyFatGoal', dailyFatGoal);
+
+    notifyListeners();
+  }
 
   // --- WATER INTAKE + WEEKLY SYNC ---
   void _buildLocalWeeklyWaterFallback() {
@@ -308,6 +354,14 @@ class DailyTrackerState extends ChangeNotifier {
     dob = prefs.getString('dob') ?? dob;
     heightCm = prefs.getDouble('heightCm') ?? heightCm;
     weightKg = prefs.getDouble('weightKg') ?? weightKg;
+    age = prefs.getInt('userAge') ?? age;
+    gender = prefs.getString('userGender') ?? gender;
+    activityLevel = prefs.getString('activityLevel') ?? activityLevel;
+    fitnessGoal = prefs.getString('fitnessGoal') ?? fitnessGoal;
+    dailyCalorieGoal = prefs.getInt('dailyCalorieGoal') ?? dailyCalorieGoal;
+    dailyProteinGoal = prefs.getInt('dailyProteinGoal') ?? dailyProteinGoal;
+    dailyCarbsGoal = prefs.getInt('dailyCarbsGoal') ?? dailyCarbsGoal;
+    dailyFatGoal = prefs.getInt('dailyFatGoal') ?? dailyFatGoal;
 
     if (userId > 0) {
       await Future.wait([
@@ -545,7 +599,8 @@ class DailyTrackerState extends ChangeNotifier {
           };
         }).toList();
 
-        weeklyUserDietLog[todayDayName] = List<Map<String, dynamic>>.from(todayLog);
+        weeklyUserDietLog[todayDayName] =
+            List<Map<String, dynamic>>.from(todayLog);
         notifyListeners();
       }
     } catch (e) {
@@ -605,8 +660,8 @@ class DailyTrackerState extends ChangeNotifier {
           };
         }).toList();
 
-        totalCaloriesBurned = workoutLog.fold(
-            0, (sum, workout) => sum + ((workout['caloriesBurned'] ?? 0) as int));
+        totalCaloriesBurned = workoutLog.fold(0,
+            (sum, workout) => sum + ((workout['caloriesBurned'] ?? 0) as int));
 
         notifyListeners();
       }
@@ -615,7 +670,7 @@ class DailyTrackerState extends ChangeNotifier {
     }
   }
 
-  // --- GYM BUDDY GROUP METHODS ---
+  // --- GYM BUDDY GROUP & CHAT METHODS ---
   Future<void> fetchMyGymGroup() async {
     if (userId <= 0) return;
     try {
@@ -626,10 +681,70 @@ class DailyTrackerState extends ChangeNotifier {
         final data = json.decode(res.body);
         activeGymGroup = data['group'];
         await _syncGroupReminderIfNewer();
+        if (activeGymGroup != null) {
+          await fetchSquadMessages();
+        }
         notifyListeners();
       }
     } catch (e) {
       debugPrint("Error fetching gym group: $e");
+    }
+  }
+
+  Future<void> fetchSquadMessages() async {
+    if (activeGymGroup == null) return;
+    final groupId = activeGymGroup!['id'];
+    try {
+      final res = await http
+          .get(Uri.parse('$backendUrl/api/groups/$groupId/messages'))
+          .timeout(const Duration(seconds: 30));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final List list = data['messages'] ?? [];
+        squadMessages =
+            list.map<Map<String, dynamic>>((m) => Map<String, dynamic>.from(m)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error fetching squad messages: $e");
+    }
+  }
+
+  Future<void> sendSquadMessage(String text) async {
+    if (activeGymGroup == null || text.trim().isEmpty) return;
+    final groupId = activeGymGroup!['id'];
+    final cleanText = text.trim();
+
+    // Optimistic local append for instant feel
+    final tempMsg = {
+      'id': DateTime.now().millisecondsSinceEpoch,
+      'group_id': groupId,
+      'user_id': userId,
+      'user_name': fullName,
+      'message': cleanText,
+      'created_at': DateTime.now().toIso8601String(),
+    };
+    squadMessages.add(tempMsg);
+    notifyListeners();
+
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$backendUrl/api/groups/$groupId/messages'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'user_id': userId,
+              'user_name': fullName,
+              'message': cleanText,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        await fetchSquadMessages();
+      }
+    } catch (e) {
+      debugPrint("Error sending squad message: $e");
     }
   }
 
@@ -651,6 +766,7 @@ class DailyTrackerState extends ChangeNotifier {
     final data = json.decode(res.body);
     if (res.statusCode == 200) {
       activeGymGroup = data['group'];
+      squadMessages.clear();
       await _syncGroupReminderIfNewer();
       notifyListeners();
     } else {
@@ -676,6 +792,7 @@ class DailyTrackerState extends ChangeNotifier {
     if (res.statusCode == 200) {
       activeGymGroup = data['group'];
       await _syncGroupReminderIfNewer();
+      await fetchSquadMessages();
       notifyListeners();
     } else {
       throw Exception(data['detail'] ?? "Invalid entry pass");
@@ -722,6 +839,7 @@ class DailyTrackerState extends ChangeNotifier {
         .post(Uri.parse('$backendUrl/api/groups/$groupId/leave/$userId'))
         .timeout(const Duration(seconds: 30));
     activeGymGroup = null;
+    squadMessages.clear();
     notifyListeners();
   }
 
@@ -790,6 +908,7 @@ class DailyTrackerState extends ChangeNotifier {
     weeklyUserDietLog.forEach((key, value) => value.clear());
     waterGlasses = 0;
     activeGymGroup = null;
+    squadMessages.clear();
     notifyListeners();
   }
 
@@ -814,6 +933,7 @@ class DailyTrackerState extends ChangeNotifier {
       waterGlasses = 0;
       totalCaloriesBurned = 0;
       activeGymGroup = null;
+      squadMessages.clear();
       notifyListeners();
     } else if (res.statusCode == 401) {
       throw Exception("Incorrect password. Please try again.");

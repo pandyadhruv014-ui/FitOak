@@ -12,7 +12,8 @@ class WorkoutHubScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Workout & Health Hub', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Workout & Health Hub',
+            style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16.0),
@@ -20,7 +21,8 @@ class WorkoutHubScreen extends StatelessWidget {
           _buildHubCard(
             context,
             title: '1. Strength Training',
-            subtitle: 'Select muscle groups, expanded exercises, sets, reps & weight',
+            subtitle:
+                'Select muscle groups, expanded exercises, sets, reps & weight',
             icon: Icons.fitness_center,
             destination: const ScaffoldPageWrapper(
               title: '1. Strength Training',
@@ -31,7 +33,8 @@ class WorkoutHubScreen extends StatelessWidget {
           _buildHubCard(
             context,
             title: '2. Highest PR Records',
-            subtitle: 'Input and view personal records across all muscle groups',
+            subtitle:
+                'Input and view personal records across all muscle groups',
             icon: Icons.emoji_events,
             destination: const ScaffoldPageWrapper(
               title: '2. Highest PR Records',
@@ -60,6 +63,18 @@ class WorkoutHubScreen extends StatelessWidget {
               child: CardioSessionsScreen(),
             ),
           ),
+          const SizedBox(height: 12),
+          _buildHubCard(
+            context,
+            title: '5. BMI & Daily Calorie Target',
+            subtitle:
+                'Accurate BMI, goal-based calorie target & live Diet intake sync',
+            icon: Icons.monitor_weight,
+            destination: const ScaffoldPageWrapper(
+              title: '5. BMI & Daily Calorie Target',
+              child: BmiAndCalorieTargetScreen(),
+            ),
+          ),
         ],
       ),
     );
@@ -74,18 +89,26 @@ class WorkoutHubScreen extends StatelessWidget {
   }) {
     final theme = Theme.of(context);
     final primaryTextColor = theme.colorScheme.onSurface;
-    final secondaryTextColor = theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
+    final secondaryTextColor =
+        theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
 
     return Card(
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         leading: Icon(icon, color: Colors.deepOrange, size: 28),
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor)),
+        title: Text(title,
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: primaryTextColor)),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4.0),
-          child: Text(subtitle, style: TextStyle(fontSize: 12, color: secondaryTextColor)),
+          child: Text(subtitle,
+              style: TextStyle(fontSize: 12, color: secondaryTextColor)),
         ),
-        trailing: Icon(Icons.arrow_forward_ios, size: 16, color: secondaryTextColor),
+        trailing:
+            Icon(Icons.arrow_forward_ios, size: 16, color: secondaryTextColor),
         onTap: () {
           Navigator.push(
             context,
@@ -101,7 +124,8 @@ class ScaffoldPageWrapper extends StatelessWidget {
   final String title;
   final Widget child;
 
-  const ScaffoldPageWrapper({super.key, required this.title, required this.child});
+  const ScaffoldPageWrapper(
+      {super.key, required this.title, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -113,24 +137,587 @@ class ScaffoldPageWrapper extends StatelessWidget {
 }
 
 // ==========================================
+// 5. ACCURATE BMI & GOAL CALORIE CALCULATOR (CONNECTED TO DIET SCREEN)
+// ==========================================
+class BmiAndCalorieTargetScreen extends StatefulWidget {
+  const BmiAndCalorieTargetScreen({super.key});
+
+  @override
+  State<BmiAndCalorieTargetScreen> createState() =>
+      _BmiAndCalorieTargetScreenState();
+}
+
+class _BmiAndCalorieTargetScreenState extends State<BmiAndCalorieTargetScreen> {
+  late TextEditingController _heightController;
+  late TextEditingController _weightController;
+  late TextEditingController _ageController;
+
+  String _gender = 'Male';
+  String _activityLevel = 'Moderate (3-5 days/week)';
+  String _selectedGoal = 'Muscle Gain / Lean Bulk';
+
+  final Map<String, double> _activityMultipliers = {
+    'Sedentary (Desk job / little exercise)': 1.2,
+    'Lightly Active (1-3 days/week)': 1.375,
+    'Moderate (3-5 days/week)': 1.55,
+    'Very Active (6-7 days/week)': 1.725,
+    'Athlete (2x/day intense training)': 1.9,
+  };
+
+  final Map<String, int> _goalCalorieDelta = {
+    'Weight Loss / Fat Loss (-500 kcal)': -500,
+    'Lean Cut / Recomp (-250 kcal)': -250,
+    'Maintain Weight (0 kcal)': 0,
+    'Muscle Gain / Lean Bulk (+300 kcal)': 300,
+    'Aggressive Bulking / Weight Gain (+500 kcal)': 500,
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _heightController =
+        TextEditingController(text: dailyTracker.heightCm.toStringAsFixed(1));
+    _weightController =
+        TextEditingController(text: dailyTracker.weightKg.toStringAsFixed(1));
+    _ageController = TextEditingController(text: dailyTracker.age.toString());
+    _gender =
+        ['Male', 'Female'].contains(dailyTracker.gender) ? dailyTracker.gender : 'Male';
+    if (_activityMultipliers.containsKey(dailyTracker.activityLevel)) {
+      _activityLevel = dailyTracker.activityLevel;
+    }
+    if (_goalCalorieDelta.containsKey(dailyTracker.fitnessGoal)) {
+      _selectedGoal = dailyTracker.fitnessGoal;
+    }
+    dailyTracker.fetchBackendMeals();
+  }
+
+  @override
+  void dispose() {
+    _heightController.dispose();
+    _weightController.dispose();
+    _ageController.dispose();
+    super.dispose();
+  }
+
+  double get _heightCm =>
+      (double.tryParse(_heightController.text.trim()) ?? dailyTracker.heightCm)
+          .clamp(80.0, 250.0);
+
+  double get _weightKg =>
+      (double.tryParse(_weightController.text.trim()) ?? dailyTracker.weightKg)
+          .clamp(25.0, 300.0);
+
+  int get _age =>
+      (int.tryParse(_ageController.text.trim()) ?? dailyTracker.age)
+          .clamp(12, 100);
+
+  // Accurate BMI: kg / (m^2)
+  double get _bmi {
+    final hMeters = _heightCm / 100.0;
+    return _weightKg / (hMeters * hMeters);
+  }
+
+  String get _bmiCategory {
+    final b = _bmi;
+    if (b < 18.5) return 'Underweight';
+    if (b < 25.0) return 'Normal Weight';
+    if (b < 30.0) return 'Overweight';
+    return 'Obese';
+  }
+
+  Color get _bmiColor {
+    final b = _bmi;
+    if (b < 18.5) return Colors.blueAccent;
+    if (b < 25.0) return Colors.green;
+    if (b < 30.0) return Colors.orange;
+    return Colors.redAccent;
+  }
+
+  double get _minHealthyWeight {
+    final hMeters = _heightCm / 100.0;
+    return 18.5 * hMeters * hMeters;
+  }
+
+  double get _maxHealthyWeight {
+    final hMeters = _heightCm / 100.0;
+    return 24.9 * hMeters * hMeters;
+  }
+
+  // Mifflin-St Jeor BMR Equation
+  double get _bmr {
+    final base = (10.0 * _weightKg) + (6.25 * _heightCm) - (5.0 * _age);
+    return _gender == 'Male' ? base + 5.0 : base - 161.0;
+  }
+
+  // Maintenance Calories (TDEE)
+  int get _tdee {
+    final mult = _activityMultipliers[_activityLevel] ?? 1.55;
+    return (_bmr * mult).round();
+  }
+
+  // Recommended Daily Calorie Target based on selected goal
+  int get _recommendedCalories {
+    final delta = _goalCalorieDelta[_selectedGoal] ?? 300;
+    return (_tdee + delta).clamp(1200, 6500);
+  }
+
+  int get _recommendedProteinG {
+    // 2.0g/kg for muscle gain/cut, 1.8g/kg for maintenance
+    final factor = _selectedGoal.contains('Maintain') ? 1.8 : 2.1;
+    return (_weightKg * factor).round();
+  }
+
+  int get _recommendedFatG {
+    // 25% of target calories from healthy fats (9 kcal/g)
+    return ((_recommendedCalories * 0.25) / 9.0).round();
+  }
+
+  int get _recommendedCarbsG {
+    final remainingCals =
+        _recommendedCalories - (_recommendedProteinG * 4) - (_recommendedFatG * 9);
+    return (remainingCals / 4.0).clamp(50, 900).round();
+  }
+
+  Future<void> _saveTargetToDietTracker() async {
+    await dailyTracker.updateCalorieAndBmiTargets(
+      height: _heightCm,
+      weight: _weightKg,
+      userAge: _age,
+      userGender: _gender,
+      activity: _activityLevel,
+      goal: _selectedGoal,
+      calorieTarget: _recommendedCalories,
+      proteinTarget: _recommendedProteinG,
+      carbsTarget: _recommendedCarbsG,
+      fatTarget: _recommendedFatG,
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            'Saved $_recommendedCalories kcal/day goal & synced with Diet Screen!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryTextColor = theme.colorScheme.onSurface;
+
+    return AnimatedBuilder(
+      animation: dailyTracker,
+      builder: (context, _) {
+        final completedIntake = dailyTracker.totalCalories;
+        final goalIntake = _recommendedCalories;
+        final remainingKcal = goalIntake - completedIntake;
+        final progress = (completedIntake / goalIntake).clamp(0.0, 1.0);
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // LIVE DIET SCREEN CALORIE SYNC CARD
+              Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: Colors.deepOrange.withValues(alpha: 0.45)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.restaurant_menu,
+                                  color: Colors.deepOrange, size: 20),
+                              const SizedBox(width: 8),
+                              Text("Today's Diet Calorie Progress",
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      color: primaryTextColor)),
+                            ],
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.refresh,
+                                size: 18, color: Colors.deepOrange),
+                            tooltip: "Refresh Logged Meals",
+                            onPressed: () => dailyTracker.fetchBackendMeals(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _miniMetric("Daily Goal", "$goalIntake kcal",
+                              Colors.deepOrange),
+                          _miniMetric("Completed (Diet)",
+                              "$completedIntake kcal", Colors.green),
+                          _miniMetric(
+                            remainingKcal >= 0 ? "Remaining" : "Surplus",
+                            "${remainingKcal.abs()} kcal",
+                            remainingKcal >= 0
+                                ? Colors.blueAccent
+                                : Colors.amber,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 10,
+                        backgroundColor:
+                            Colors.deepOrange.withValues(alpha: 0.2),
+                        color: remainingKcal >= 0
+                            ? Colors.deepOrange
+                            : Colors.green,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "${(progress * 100).toStringAsFixed(0)}% of daily target completed from ${dailyTracker.todayLog.length} logged meal(s)",
+                        style:
+                            const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // BODY METRICS & GOAL INPUTS
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Body Metrics & Fitness Goal",
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: primaryTextColor)),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _heightController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Height (cm)',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: _weightController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Weight (kg)',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _ageController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Age (yrs)',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _gender,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Gender',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: ['Male', 'Female']
+                                  .map((g) => DropdownMenuItem(
+                                      value: g, child: Text(g)))
+                                  .toList(),
+                              onChanged: (val) {
+                                if (val != null) setState(() => _gender = val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _activityLevel,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Weekly Activity Level',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _activityMultipliers.keys
+                            .map((lvl) => DropdownMenuItem(
+                                  value: lvl,
+                                  child: Text(lvl,
+                                      overflow: TextOverflow.ellipsis),
+                                ))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _activityLevel = val);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedGoal,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Transformation Goal',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _goalCalorieDelta.keys
+                            .map((g) => DropdownMenuItem(
+                                  value: g,
+                                  child: Text(g,
+                                      overflow: TextOverflow.ellipsis),
+                                ))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedGoal = val);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ACCURATE BMI & METABOLIC BREAKDOWN CARD
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text("Accurate BMI Analysis",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: primaryTextColor)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _bmiColor.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _bmiCategory,
+                              style: TextStyle(
+                                  color: _bmiColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Text(
+                            _bmi.toStringAsFixed(1),
+                            style: TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.bold,
+                                color: _bmiColor),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Text(
+                              "Healthy BMI Range: 18.5 – 24.9\nIdeal Weight for ${_heightCm.toStringAsFixed(0)} cm: ${_minHealthyWeight.toStringAsFixed(1)} – ${_maxHealthyWeight.toStringAsFixed(1)} kg",
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                  height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      Text("Daily Calorie & Macro Suggestion",
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: primaryTextColor)),
+                      const SizedBox(height: 8),
+                      Text(
+                        "• Basal Metabolic Rate (BMR): ${_bmr.round()} kcal/day\n"
+                        "• Maintenance Calories (TDEE): $_tdee kcal/day\n"
+                        "• Recommended Target ($_selectedGoal): $_recommendedCalories kcal/day",
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: primaryTextColor,
+                            height: 1.5),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _miniMetric("Protein", "${_recommendedProteinG}g",
+                              Colors.blueAccent),
+                          _miniMetric("Carbs", "${_recommendedCarbsG}g",
+                              Colors.green),
+                          _miniMetric(
+                              "Fats", "${_recommendedFatG}g", Colors.amber),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepOrange),
+                          onPressed: _saveTargetToDietTracker,
+                          icon: const Icon(Icons.check_circle,
+                              color: Colors.white),
+                          label: const Text(
+                            "Apply Target & Sync with Diet Screen",
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _miniMetric(String label, String val, Color color) {
+    return Column(
+      children: [
+        Text(val,
+            style: TextStyle(
+                fontWeight: FontWeight.bold, fontSize: 15, color: color)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      ],
+    );
+  }
+}
+
+// ==========================================
 // STRENGTH TRAINING SECTION
 // ==========================================
 class StrengthMuscleSelectorScreen extends StatefulWidget {
   const StrengthMuscleSelectorScreen({super.key});
 
   @override
-  State<StrengthMuscleSelectorScreen> createState() => _StrengthMuscleSelectorScreenState();
+  State<StrengthMuscleSelectorScreen> createState() =>
+      _StrengthMuscleSelectorScreenState();
 }
 
-class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScreen> {
+class _StrengthMuscleSelectorScreenState
+    extends State<StrengthMuscleSelectorScreen> {
   final Map<String, List<String>> muscleExerciseMap = {
-    'Chest': ['Incline Barbell Bench Press', 'Incline Dumbbell Press', 'Pec Dec Flyes', 'Cable Chest Flyes', 'Flat Dumbbell Press', 'Dips'],
-    'Back': ['Seated Rows Cable Machine', 'Lat Pulldowns (Wide Grip)', 'Lat Pulldowns (Close Grip)', 'Lat Pulldowns (Underhand Grip)', 'Barbell Bent-Over Rows', 'Deadlifts', 'Face Pulls'],
-    'Shoulders': ['Cable Lateral Raises', 'Cable Front Raises', 'Face Pulls', 'Overhead Shoulder Press', 'Arnold Press', 'Rear Delt Flyes'],
-    'Biceps': ['Cable Bicep Curls', 'Rope Curls', 'Wide Grip Cable Rod Curls', 'Barbell Curls', 'Hammer Curls', 'Preacher Curls'],
-    'Triceps': ['Triceps Rod Pushdown', 'Single Arm Triceps Pushdown', 'Triceps Rope Pushdowns', 'Skull Crushers', 'Overhead Extensions'],
-    'Legs': ['Bulgarian Split Squat', 'Hack Squat', 'Barbell Squats', 'Leg Press', 'Romanian Deadlifts', 'Leg Extensions', 'Hamstring Curls'],
-    'Abs': ['Cable Crunches', 'Hanging Leg Raises', 'Plank Holds', 'Russian Twists'],
+    'Chest': [
+      'Incline Barbell Bench Press',
+      'Incline Dumbbell Press',
+      'Pec Dec Flyes',
+      'Cable Chest Flyes',
+      'Flat Dumbbell Press',
+      'Dips'
+    ],
+    'Back': [
+      'Seated Rows Cable Machine',
+      'Lat Pulldowns (Wide Grip)',
+      'Lat Pulldowns (Close Grip)',
+      'Lat Pulldowns (Underhand Grip)',
+      'Barbell Bent-Over Rows',
+      'Deadlifts',
+      'Face Pulls'
+    ],
+    'Shoulders': [
+      'Cable Lateral Raises',
+      'Cable Front Raises',
+      'Face Pulls',
+      'Overhead Shoulder Press',
+      'Arnold Press',
+      'Rear Delt Flyes'
+    ],
+    'Biceps': [
+      'Cable Bicep Curls',
+      'Rope Curls',
+      'Wide Grip Cable Rod Curls',
+      'Barbell Curls',
+      'Hammer Curls',
+      'Preacher Curls'
+    ],
+    'Triceps': [
+      'Triceps Rod Pushdown',
+      'Single Arm Triceps Pushdown',
+      'Triceps Rope Pushdowns',
+      'Skull Crushers',
+      'Overhead Extensions'
+    ],
+    'Legs': [
+      'Bulgarian Split Squat',
+      'Hack Squat',
+      'Barbell Squats',
+      'Leg Press',
+      'Romanian Deadlifts',
+      'Leg Extensions',
+      'Hamstring Curls'
+    ],
+    'Abs': [
+      'Cable Crunches',
+      'Hanging Leg Raises',
+      'Plank Holds',
+      'Russian Twists'
+    ],
   };
 
   final Map<String, List<String>> muscleAssetCandidates = {
@@ -163,7 +750,8 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
 
   Widget _tryLoadImage(List<String> paths, int index) {
     if (index >= paths.length) {
-      return const Icon(Icons.fitness_center, color: Colors.deepOrange, size: 34);
+      return const Icon(Icons.fitness_center,
+          color: Colors.deepOrange, size: 34);
     }
     return Image.asset(
       paths[index],
@@ -178,7 +766,8 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primaryTextColor = theme.colorScheme.onSurface;
-    final secondaryTextColor = theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
+    final secondaryTextColor =
+        theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
 
     return ListView.separated(
       padding: const EdgeInsets.all(16.0),
@@ -191,7 +780,8 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
 
         return Card(
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             leading: SizedBox(
               width: 52,
               height: 52,
@@ -201,13 +791,17 @@ class _StrengthMuscleSelectorScreenState extends State<StrengthMuscleSelectorScr
             ),
             title: Text(
               muscle,
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor),
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: primaryTextColor),
             ),
             subtitle: Text(
               "${exercises.length} Exercises available",
               style: TextStyle(fontSize: 12, color: secondaryTextColor),
             ),
-            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: secondaryTextColor),
+            trailing: Icon(Icons.arrow_forward_ios,
+                size: 16, color: secondaryTextColor),
             onTap: () => _openMuscleSubWindow(muscle),
           ),
         );
@@ -244,6 +838,8 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
   bool isSuperSetMode = false;
   bool isDropSetMode = false;
 
+  late Set<int> selectedBuddyIds;
+
   List<SetLog> currentSets = [
     SetLog(setNumber: 1, reps: 12, weight: 20.0),
     SetLog(setNumber: 2, reps: 10, weight: 25.0),
@@ -253,15 +849,18 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
   void initState() {
     super.initState();
     selectedExercise = widget.exercises.isNotEmpty ? widget.exercises.first : '';
+    selectedBuddyIds = dailyTracker.gymBuddiesExcludingMe
+        .map((b) => b['user_id'] as int)
+        .toSet();
   }
 
   void _addSet() {
     setState(() {
       int nextSetNum = currentSets.length + 1;
-      double lastWeight = currentSets.isNotEmpty ? currentSets.last.weight : 20.0;
+      double lastWeight =
+          currentSets.isNotEmpty ? currentSets.last.weight : 20.0;
       int lastReps = currentSets.isNotEmpty ? currentSets.last.reps : 10;
 
-      // AUTOMATED DROP SET LOGIC: Automatically reduce weight by 20% on added set
       if (isDropSetMode) {
         lastWeight = double.parse((lastWeight * 0.80).toStringAsFixed(1));
       }
@@ -286,7 +885,7 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
     }
   }
 
-  void _logWorkoutSession() {
+  Future<void> _logWorkoutSession() async {
     String logName = selectedExercise;
     if (isSuperSetMode && pairedSuperSetExercise != null) {
       logName = "$selectedExercise + $pairedSuperSetExercise (Super Set)";
@@ -294,15 +893,24 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
       logName = "$selectedExercise (Drop Set)";
     }
 
-    dailyTracker.logExerciseWithSets(
+    final messenger = ScaffoldMessenger.of(context);
+    final buddiesCount = selectedBuddyIds.length;
+
+    await dailyTracker.logExerciseWithSets(
       muscle: widget.muscleName,
       exerciseName: logName,
       sets: currentSets,
+      buddyUserIds: selectedBuddyIds.toList(),
     );
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    if (!mounted) return;
+    messenger.showSnackBar(
       SnackBar(
-        content: Text('Logged $logName to Today\'s Workouts!'),
+        content: Text(
+          buddiesCount > 0
+              ? 'Logged $logName for you + $buddiesCount gym buddy(s)!'
+              : 'Logged $logName to Today\'s Workouts!',
+        ),
         backgroundColor: Colors.deepOrange,
       ),
     );
@@ -312,6 +920,7 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primaryTextColor = theme.colorScheme.onSurface;
+    final buddies = dailyTracker.gymBuddiesExcludingMe;
 
     return Scaffold(
       appBar: AppBar(
@@ -322,14 +931,22 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
               height: 28,
               child: Image.asset(
                 widget.assetPaths.isNotEmpty ? widget.assetPaths[0] : '',
+                fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) => Image.asset(
                   widget.assetPaths.length > 1 ? widget.assetPaths[1] : '',
-                  errorBuilder: (_, __, ___) => const Icon(Icons.fitness_center, color: Colors.deepOrange, size: 20),
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.fitness_center,
+                      color: Colors.deepOrange, size: 20),
                 ),
               ),
             ),
             const SizedBox(width: 10),
-            Text("${widget.muscleName} Workouts"),
+            Expanded(
+              child: Text(
+                "${widget.muscleName} Workouts",
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
       ),
@@ -344,23 +961,40 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Select Primary Exercise", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: primaryTextColor)),
+                    Text("Select Primary Exercise",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: primaryTextColor)),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
                       initialValue: selectedExercise,
-                      decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-                      items: widget.exercises.map((ex) => DropdownMenuItem(value: ex, child: Text(ex))).toList(),
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                          border: OutlineInputBorder(), isDense: true),
+                      items: widget.exercises
+                          .map((ex) => DropdownMenuItem(
+                                value: ex,
+                                child: Text(ex,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1),
+                              ))
+                          .toList(),
                       onChanged: (val) {
                         if (val != null) setState(() => selectedExercise = val);
                       },
                     ),
-
                     if (widget.allowAdvancedSets) ...[
                       const Divider(height: 24),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text("Super Set Mode", style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
+                          Expanded(
+                            child: Text("Super Set Mode",
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: primaryTextColor)),
+                          ),
                           CustomLoadingSwitch(
                             value: isSuperSetMode,
                             onChanged: (val) {
@@ -375,17 +1009,36 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
                       if (isSuperSetMode) ...[
                         const SizedBox(height: 10),
                         DropdownButtonFormField<String>(
-                          hint: const Text("Select Paired Exercise"),
-                          decoration: const InputDecoration(labelText: 'Paired Super Set Exercise', border: OutlineInputBorder(), isDense: true),
-                          items: widget.exercises.where((e) => e != selectedExercise).map((ex) => DropdownMenuItem(value: ex, child: Text(ex))).toList(),
-                          onChanged: (val) => setState(() => pairedSuperSetExercise = val),
+                          isExpanded: true,
+                          hint: const Text("Select Paired Exercise",
+                              overflow: TextOverflow.ellipsis),
+                          decoration: const InputDecoration(
+                              labelText: 'Paired Super Set Exercise',
+                              border: OutlineInputBorder(),
+                              isDense: true),
+                          items: widget.exercises
+                              .where((e) => e != selectedExercise)
+                              .map((ex) => DropdownMenuItem(
+                                    value: ex,
+                                    child: Text(ex,
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1),
+                                  ))
+                              .toList(),
+                          onChanged: (val) =>
+                              setState(() => pairedSuperSetExercise = val),
                         ),
                       ],
                       const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text("Drop Set Mode (-20% Auto-weight)", style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
+                          Expanded(
+                            child: Text("Drop Set Mode (-20% Auto-weight)",
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: primaryTextColor)),
+                          ),
                           CustomLoadingSwitch(
                             value: isDropSetMode,
                             onChanged: (val) {
@@ -403,10 +1056,12 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
               ),
             ),
             const SizedBox(height: 20),
-
-            Text("Sets Breakdown", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryTextColor)),
+            Text("Sets Breakdown",
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: primaryTextColor)),
             const SizedBox(height: 10),
-
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -422,7 +1077,9 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
                         CircleAvatar(
                           radius: 14,
                           backgroundColor: Colors.deepOrange,
-                          child: Text("${setItem.setNumber}", style: const TextStyle(color: Colors.white, fontSize: 12)),
+                          child: Text("${setItem.setNumber}",
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 12)),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -430,8 +1087,12 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
                             key: Key('reps_${index}_${setItem.reps}'),
                             initialValue: "${setItem.reps}",
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Reps', border: OutlineInputBorder(), isDense: true),
-                            onChanged: (val) => setItem.reps = int.tryParse(val) ?? setItem.reps,
+                            decoration: const InputDecoration(
+                                labelText: 'Reps',
+                                border: OutlineInputBorder(),
+                                isDense: true),
+                            onChanged: (val) => setItem.reps =
+                                int.tryParse(val) ?? setItem.reps,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -440,17 +1101,23 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
                             key: Key('weight_${index}_${setItem.weight}'),
                             initialValue: "${setItem.weight}",
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Weight (kg)', border: OutlineInputBorder(), isDense: true),
-                            onChanged: (val) => setItem.weight = double.tryParse(val) ?? setItem.weight,
+                            decoration: const InputDecoration(
+                                labelText: 'Weight (kg)',
+                                border: OutlineInputBorder(),
+                                isDense: true),
+                            onChanged: (val) => setItem.weight =
+                                double.tryParse(val) ?? setItem.weight,
                           ),
                         ),
                         const SizedBox(width: 6),
                         CustomLoadingSwitch(
                           value: setItem.isSpecialSet,
-                          onChanged: (val) => setState(() => setItem.isSpecialSet = val),
+                          onChanged: (val) =>
+                              setState(() => setItem.isSpecialSet = val),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.remove_circle, color: Colors.redAccent),
+                          icon: const Icon(Icons.remove_circle,
+                              color: Colors.redAccent),
                           onPressed: () => _removeSet(index),
                         ),
                       ],
@@ -460,9 +1127,10 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
               },
             ),
             const SizedBox(height: 12),
-
             OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.deepOrange), minimumSize: const Size.fromHeight(42)),
+              style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.deepOrange),
+                  minimumSize: const Size.fromHeight(42)),
               onPressed: _addSet,
               icon: const Icon(Icons.add, color: Colors.deepOrange),
               label: Text(
@@ -470,13 +1138,96 @@ class _MuscleWorkoutSubWindowState extends State<MuscleWorkoutSubWindow> {
                 style: const TextStyle(color: Colors.deepOrange),
               ),
             ),
+            if (dailyTracker.activeGymGroup != null) ...[
+              const SizedBox(height: 18),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.groups,
+                              color: Colors.deepOrange, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "Co-Log with ${dailyTracker.activeGymGroup?['group_name'] ?? 'Gym Squad'}",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: primaryTextColor),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.refresh,
+                                size: 18, color: Colors.deepOrange),
+                            tooltip: "Refresh Squad Members",
+                            onPressed: () async {
+                              await dailyTracker.fetchMyGymGroup();
+                              if (mounted) {
+                                setState(() {
+                                  selectedBuddyIds = dailyTracker
+                                      .gymBuddiesExcludingMe
+                                      .map((b) => b['user_id'] as int)
+                                      .toSet();
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      if (buddies.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            "No other buddies in your squad yet. Have a buddy join with your entry pass, then tap refresh.",
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        )
+                      else ...[
+                        const Text(
+                          "Checked buddies also get this exercise logged automatically:",
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 6),
+                        ...buddies.map((buddy) {
+                          final bid = buddy['user_id'] as int;
+                          return CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            activeColor: Colors.deepOrange,
+                            title: Text(buddy['user_name'] ?? 'Buddy',
+                                style: TextStyle(color: primaryTextColor)),
+                            value: selectedBuddyIds.contains(bid),
+                            onChanged: (checked) {
+                              setState(() {
+                                if (checked == true) {
+                                  selectedBuddyIds.add(bid);
+                                } else {
+                                  selectedBuddyIds.remove(bid);
+                                }
+                              });
+                            },
+                          );
+                        }),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
-
             ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, minimumSize: const Size.fromHeight(48)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepOrange,
+                  minimumSize: const Size.fromHeight(48)),
               onPressed: _logWorkoutSession,
               icon: const Icon(Icons.check, color: Colors.white),
-              label: const Text('Log Exercise Session', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              label: const Text('Log Exercise Session',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
             )
           ],
         ),
@@ -501,12 +1252,25 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
   String _selectedExercise = 'Incline Dumbbell Press';
 
   final Map<String, List<String>> _exercises = {
-    'Chest': ['Incline Dumbbell Press', 'Pec Dec Flyes', 'Cable Chest Flyes', 'Bench Press'],
+    'Chest': [
+      'Incline Dumbbell Press',
+      'Pec Dec Flyes',
+      'Cable Chest Flyes',
+      'Bench Press'
+    ],
     'Back': ['Seated Rows Cable Machine', 'Lat Pulldowns', 'Deadlift'],
     'Legs': ['Bulgarian Split Squat', 'Hack Squat', 'Barbell Squat'],
     'Shoulders': ['Cable Lateral Raises', 'Cable Front Raises', 'Face Pulls'],
-    'Biceps': ['Cable Bicep Curls', 'Rope Curls', 'Wide Grip Cable Rod Curls'],
-    'Triceps': ['Triceps Rod Pushdown', 'Single Arm Triceps Pushdown', 'Skull Crushers'],
+    'Biceps': [
+      'Cable Bicep Curls',
+      'Rope Curls',
+      'Wide Grip Cable Rod Curls'
+    ],
+    'Triceps': [
+      'Triceps Rod Pushdown',
+      'Single Arm Triceps Pushdown',
+      'Skull Crushers'
+    ],
     'Abs': ['Cable Crunches', 'Hanging Leg Raises'],
   };
 
@@ -522,7 +1286,8 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
       dailyTracker.updateOrAddPR(_selectedMuscle, _selectedExercise, weight);
       _weightController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Updated PR for $_selectedExercise to $weight kg!')),
+        SnackBar(
+            content: Text('Updated PR for $_selectedExercise to $weight kg!')),
       );
     }
   }
@@ -541,9 +1306,12 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Input / Update Personal Record (PR)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
+              Text("Input / Update Personal Record (PR)",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: primaryTextColor)),
               const SizedBox(height: 10),
-
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -559,9 +1327,15 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Muscle',
                                 border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 12),
                               ),
-                              items: _exercises.keys.map((m) => DropdownMenuItem(value: m, child: Text(m, overflow: TextOverflow.ellipsis))).toList(),
+                              items: _exercises.keys
+                                  .map((m) => DropdownMenuItem(
+                                      value: m,
+                                      child: Text(m,
+                                          overflow: TextOverflow.ellipsis)))
+                                  .toList(),
                               onChanged: (val) {
                                 if (val != null) {
                                   setState(() {
@@ -581,11 +1355,19 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Exercise',
                                 border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 12),
                               ),
-                              items: (_exercises[_selectedMuscle] ?? []).map((e) => DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis))).toList(),
+                              items: (_exercises[_selectedMuscle] ?? [])
+                                  .map((e) => DropdownMenuItem(
+                                      value: e,
+                                      child: Text(e,
+                                          overflow: TextOverflow.ellipsis)))
+                                  .toList(),
                               onChanged: (val) {
-                                if (val != null) setState(() => _selectedExercise = val);
+                                if (val != null) {
+                                  setState(() => _selectedExercise = val);
+                                }
                               },
                             ),
                           ),
@@ -595,29 +1377,44 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                       TextField(
                         controller: _weightController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Highest Weight Lifted (kg)', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(
+                            labelText: 'Highest Weight Lifted (kg)',
+                            border: OutlineInputBorder()),
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, minimumSize: const Size.fromHeight(45)),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.amber,
+                            minimumSize: const Size.fromHeight(45)),
                         onPressed: _inputPR,
-                        icon: const Icon(Icons.emoji_events, color: Colors.black),
-                        label: const Text('Save Personal Record', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                        icon:
+                            const Icon(Icons.emoji_events, color: Colors.black),
+                        label: const Text('Save Personal Record',
+                            style: TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 25),
-
-              Text("Highest PR Records Stored", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
+              Text("Highest PR Records Stored",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: primaryTextColor)),
               const SizedBox(height: 10),
-
               prs.isEmpty
                   ? Card(
                       child: Padding(
                         padding: const EdgeInsets.all(20.0),
-                        child: Center(child: Text("No PR records stored yet.", style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700]))),
+                        child: Center(
+                            child: Text("No PR records stored yet.",
+                                style: TextStyle(
+                                    color: theme.brightness == Brightness.dark
+                                        ? Colors.grey
+                                        : Colors.grey[700]))),
                       ),
                     )
                   : Column(
@@ -625,8 +1422,12 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 6),
                           child: ExpansionTile(
-                            leading: const Icon(Icons.emoji_events, color: Colors.amber),
-                            title: Text("${muscleEntry.key} PRs", style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
+                            leading: const Icon(Icons.emoji_events,
+                                color: Colors.amber),
+                            title: Text("${muscleEntry.key} PRs",
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: primaryTextColor)),
                             children: muscleEntry.value.entries.map((exEntry) {
                               return ListTile(
                                 title: Row(
@@ -636,13 +1437,17 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
                                         exEntry.key,
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,
-                                        style: TextStyle(color: primaryTextColor),
+                                        style:
+                                            TextStyle(color: primaryTextColor),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
                                       "${exEntry.value} kg",
-                                      style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 16),
+                                      style: const TextStyle(
+                                          color: Colors.deepOrange,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16),
                                     ),
                                   ],
                                 ),
@@ -726,9 +1531,12 @@ class _WarmupRoutinesScreenState extends State<WarmupRoutinesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Select Target Muscle Group", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
+          Text("Select Target Muscle Group",
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: primaryTextColor)),
           const SizedBox(height: 10),
-
           Wrap(
             spacing: 8.0,
             children: _warmupData.keys.map((group) {
@@ -744,7 +1552,6 @@ class _WarmupRoutinesScreenState extends State<WarmupRoutinesScreen> {
             }).toList(),
           ),
           const SizedBox(height: 20),
-
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -755,26 +1562,34 @@ class _WarmupRoutinesScreenState extends State<WarmupRoutinesScreen> {
                     children: [
                       Icon(Icons.play_circle_fill, color: Colors.amber),
                       SizedBox(width: 8),
-                      Text("Before Workout Warmup", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.amber)),
+                      Text("Before Workout Warmup",
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber)),
                     ],
                   ),
                   const Divider(),
-                  ...(routines['Before Workout (Dynamic Warmup)'] ?? []).map((ex) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check_circle_outline, size: 16, color: Colors.deepOrange),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(ex, style: TextStyle(color: primaryTextColor))),
-                          ],
-                        ),
-                      )),
+                  ...(routines['Before Workout (Dynamic Warmup)'] ?? [])
+                      .map((ex) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle_outline,
+                                    size: 16, color: Colors.deepOrange),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                    child: Text(ex,
+                                        style: TextStyle(
+                                            color: primaryTextColor))),
+                              ],
+                            ),
+                          )),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 15),
-
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -785,20 +1600,29 @@ class _WarmupRoutinesScreenState extends State<WarmupRoutinesScreen> {
                     children: [
                       Icon(Icons.stop_circle, color: Colors.teal),
                       SizedBox(width: 8),
-                      Text("After Workout Cooldowns", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+                      Text("After Workout Cooldowns",
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.teal)),
                     ],
                   ),
                   const Divider(),
-                  ...(routines['After Workout (Static Stretching)'] ?? []).map((ex) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check_circle_outline, size: 16, color: Colors.teal),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(ex, style: TextStyle(color: primaryTextColor))),
-                          ],
-                        ),
-                      )),
+                  ...(routines['After Workout (Static Stretching)'] ?? [])
+                      .map((ex) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle_outline,
+                                    size: 16, color: Colors.teal),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                    child: Text(ex,
+                                        style: TextStyle(
+                                            color: primaryTextColor))),
+                              ],
+                            ),
+                          )),
                 ],
               ),
             ),
@@ -841,20 +1665,24 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
     final incline = double.tryParse(_inclineController.text.trim()) ?? 0.0;
 
     if (duration <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid duration!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid duration!')));
       return;
     }
 
     setState(() => _isCalculating = true);
 
     try {
-      final prompt = "Calculate calories burned for $_cardioType session: duration $duration mins, speed $speed km/h, incline $incline%. Return JSON strictly in format: {\"calories\": 0, \"distance_km\": 0.0}";
+      final prompt =
+          "Calculate calories burned for $_cardioType session: duration $duration mins, speed $speed km/h, incline $incline%. Return JSON strictly in format: {\"calories\": 0, \"distance_km\": 0.0}";
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/ai/chat'),
-        headers: const {'Content-Type': 'application/json'},
-        body: jsonEncode({'prompt': prompt}),
-      ).timeout(const Duration(seconds: 50));
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/ai/chat'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'prompt': prompt}),
+          )
+          .timeout(const Duration(seconds: 50));
 
       int cals = (duration * 8.5).toInt();
       double dist = (speed * (duration / 60.0));
@@ -862,7 +1690,8 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         String rawText = data['response'] ?? '';
-        rawText = rawText.replaceAll("```json", "").replaceAll("```", "").trim();
+        rawText =
+            rawText.replaceAll("```json", "").replaceAll("```", "").trim();
         try {
           final jsonResult = jsonDecode(rawText);
           cals = jsonResult['calories'] ?? cals;
@@ -875,7 +1704,9 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Logged $_cardioType: $cals kcal burned ($dist km)!')),
+        SnackBar(
+            content:
+                Text('Logged $_cardioType: $cals kcal burned ($dist km)!')),
       );
 
       _durationController.clear();
@@ -884,12 +1715,15 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
     } catch (_) {
       int fallbackCals = (duration * 8).toInt();
       double fallbackDist = (speed * (duration / 60.0));
-      dailyTracker.logCardioSession(_cardioType, duration, fallbackDist, fallbackCals);
+      dailyTracker.logCardioSession(
+          _cardioType, duration, fallbackDist, fallbackCals);
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Logged $_cardioType (Offline estimate): $fallbackCals kcal!')),
+        SnackBar(
+            content: Text(
+                'Logged $_cardioType (Offline estimate): $fallbackCals kcal!')),
       );
     } finally {
       if (mounted) setState(() => _isCalculating = false);
@@ -906,9 +1740,12 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Cardio Endurance Tracker", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
+          Text("Cardio Endurance Tracker",
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: primaryTextColor)),
           const SizedBox(height: 10),
-
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -916,9 +1753,19 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
                 children: [
                   DropdownButtonFormField<String>(
                     initialValue: _cardioType,
-                    decoration: const InputDecoration(labelText: 'Cardio Mode', border: OutlineInputBorder()),
-                    items: ['Treadmill Running', 'Outdoor Cycling', 'Rowing Machine', 'Elliptical Trainer', 'Stair Master']
-                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Cardio Mode', border: OutlineInputBorder()),
+                    items: [
+                      'Treadmill Running',
+                      'Outdoor Cycling',
+                      'Rowing Machine',
+                      'Elliptical Trainer',
+                      'Stair Master'
+                    ]
+                        .map((c) => DropdownMenuItem(
+                            value: c,
+                            child: Text(c, overflow: TextOverflow.ellipsis)))
                         .toList(),
                     onChanged: (val) {
                       if (val != null) setState(() => _cardioType = val);
@@ -928,7 +1775,9 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
                   TextField(
                     controller: _durationController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Duration (Minutes)', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                        labelText: 'Duration (Minutes)',
+                        border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -937,7 +1786,9 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
                         child: TextField(
                           controller: _speedController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Avg Speed (km/h)', border: OutlineInputBorder()),
+                          decoration: const InputDecoration(
+                              labelText: 'Avg Speed (km/h)',
+                              border: OutlineInputBorder()),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -945,18 +1796,29 @@ class _CardioSessionsScreenState extends State<CardioSessionsScreen> {
                         child: TextField(
                           controller: _inclineController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Incline Level / Resistance', border: OutlineInputBorder()),
+                          decoration: const InputDecoration(
+                              labelText: 'Incline Level / Resistance',
+                              border: OutlineInputBorder()),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 15),
                   ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, minimumSize: const Size.fromHeight(45)),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        minimumSize: const Size.fromHeight(45)),
                     onPressed: _isCalculating ? null : _calculateAndLogCardio,
                     child: _isCalculating
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text('Calculate Calories & Log Session', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : const Text('Calculate Calories & Log Session',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),

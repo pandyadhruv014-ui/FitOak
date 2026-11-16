@@ -18,6 +18,7 @@ import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
 from dotenv import load_dotenv
 import urllib.request
+from pydantic import BaseModel
 
 import database
 import models
@@ -111,6 +112,15 @@ def sync_database_schema():
         user_name VARCHAR(255) NOT NULL,
         joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(group_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS group_messages (
+        id SERIAL PRIMARY KEY,
+        group_id INTEGER NOT NULL REFERENCES gym_groups(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        user_name VARCHAR(120) NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     -- Patch existing tables safely
@@ -320,6 +330,11 @@ class GroupReminderUpdate(BaseModel):
 class DeleteAccountRequest(BaseModel):
     user_id: int
     password: str
+
+class GroupMessageCreate(BaseModel):
+    user_id: int
+    user_name: str
+    message: str
 
 # --- Email Helper ---
 def send_smtp_email_async(to_email: str, otp_code: str):
@@ -899,3 +914,83 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+
+#--Group Chat Endpoints--#
+
+@app.get("/api/groups/{group_id}/messages")
+def get_group_messages(group_id: int, limit: int = 100):
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS group_messages (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                user_name VARCHAR(120) NOT NULL,
+                message TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        rows = conn.execute(
+            text("""
+                SELECT id, group_id, user_id, user_name, message, created_at
+                FROM group_messages
+                WHERE group_id = :gid
+                ORDER BY id ASC
+                LIMIT :lim
+            """),
+            {"gid": group_id, "lim": limit},
+        ).fetchall()
+
+        messages = [
+            {
+                "id": r[0],
+                "group_id": r[1],
+                "user_id": r[2],
+                "user_name": r[3],
+                "message": r[4],
+                "created_at": r[5].isoformat() if r[5] else "",
+            }
+            for r in rows
+        ]
+        return {"messages": messages}
+
+@app.post("/api/groups/{group_id}/messages")
+def post_group_message(group_id: int, payload: GroupMessageCreate):
+    text_msg = payload.message.strip()
+    if not text_msg:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS group_messages (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                user_name VARCHAR(120) NOT NULL,
+                message TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        row = conn.execute(
+            text("""
+                INSERT INTO group_messages (group_id, user_id, user_name, message)
+                VALUES (:gid, :uid, :uname, :msg)
+                RETURNING id, created_at
+            """),
+            {
+                "gid": group_id,
+                "uid": payload.user_id,
+                "uname": payload.user_name,
+                "msg": text_msg,
+            },
+        ).fetchone()
+        return {
+            "status": "sent",
+            "message": {
+                "id": row[0],
+                "group_id": group_id,
+                "user_id": payload.user_id,
+                "user_name": payload.user_name,
+                "message": text_msg,
+                "created_at": row[1].isoformat() if row[1] else "",
+            },
+        }
