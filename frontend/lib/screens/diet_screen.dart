@@ -39,14 +39,18 @@ class _DietScreenState extends State<DietScreen> {
     if (!mounted) return;
     setState(() => isLoading = true);
 
+    await dailyTracker.checkAndRotateDailyLog();
+    final todayStr = dailyTracker.todayDateStr;
+
     try {
       final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
+      final userId =
+          prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
 
       if (userId > 0) {
         final res = await http
-            .get(Uri.parse('$backendUrl/api/meals/$userId'))
-            .timeout(const Duration(seconds: 30));
+            .get(Uri.parse('$backendUrl/api/meals/$userId?date=$todayStr'))
+            .timeout(const Duration(seconds: 60));
 
         if (res.statusCode == 200) {
           final data = json.decode(res.body);
@@ -98,7 +102,8 @@ class _DietScreenState extends State<DietScreen> {
         bool isAnalyzing = false;
         final theme = Theme.of(dialogContext);
         final primaryTextColor = theme.colorScheme.onSurface;
-        final secondaryTextColor = theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
+        final secondaryTextColor =
+            theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
 
         return StatefulBuilder(
           builder: (stateContext, setDialogState) {
@@ -112,7 +117,11 @@ class _DietScreenState extends State<DietScreen> {
                 children: [
                   const Icon(Icons.auto_awesome, color: Colors.amber, size: 22),
                   const SizedBox(width: 8),
-                  Text("Log Meal with AI", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
+                  Text("Log Meal with AI",
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: primaryTextColor)),
                 ],
               ),
               content: SingleChildScrollView(
@@ -134,7 +143,8 @@ class _DietScreenState extends State<DietScreen> {
                         labelStyle: TextStyle(color: secondaryTextColor),
                         hintText: "e.g., Paneer Tikka or Oats Bowl",
                         prefixIcon: const Icon(Icons.restaurant, color: Colors.orange),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -147,19 +157,24 @@ class _DietScreenState extends State<DietScreen> {
                         labelStyle: TextStyle(color: secondaryTextColor),
                         hintText: "e.g., 200g or 2 pieces or 1 bowl",
                         prefixIcon: const Icon(Icons.scale, color: Colors.orange),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                     const SizedBox(height: 16),
                     if (isAnalyzing)
                       const Column(
                         children: [
-                          Center(child: CircularProgressIndicator(color: Colors.orange)),
+                          Center(
+                              child: CircularProgressIndicator(color: Colors.orange)),
                           SizedBox(height: 12),
                           Center(
                             child: Text(
                               "FitOak-AI analyzing nutrients...",
-                              style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.w500),
+                              style: TextStyle(
+                                  color: Colors.amber,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500),
                             ),
                           ),
                         ],
@@ -176,12 +191,14 @@ class _DietScreenState extends State<DietScreen> {
                             Navigator.pop(stateContext);
                           }
                         },
-                  child: Text("Cancel", style: TextStyle(color: secondaryTextColor)),
+                  child:
+                      Text("Cancel", style: TextStyle(color: secondaryTextColor)),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
                   ),
                   onPressed: isAnalyzing
                       ? null
@@ -192,7 +209,9 @@ class _DietScreenState extends State<DietScreen> {
                           if (dish.isEmpty || quantity.isEmpty) {
                             if (stateContext.mounted) {
                               ScaffoldMessenger.of(stateContext).showSnackBar(
-                                const SnackBar(content: Text("Please fill in dish name and quantity.")),
+                                const SnackBar(
+                                    content: Text(
+                                        "Please fill in dish name and quantity.")),
                               );
                             }
                             return;
@@ -202,14 +221,17 @@ class _DietScreenState extends State<DietScreen> {
 
                           try {
                             final prefs = await SharedPreferences.getInstance();
-                            final userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? dailyTracker.userId;
+                            final userId = prefs.getInt('userId') ??
+                                prefs.getInt('user_id') ??
+                                dailyTracker.userId;
 
                             if (userId <= 0) {
                               setDialogState(() => isAnalyzing = false);
                               if (stateContext.mounted) {
                                 ScaffoldMessenger.of(stateContext).showSnackBar(
                                   const SnackBar(
-                                    content: Text("User session expired. Please log in again."),
+                                    content: Text(
+                                        "User session expired. Please log in again."),
                                     backgroundColor: Colors.red,
                                   ),
                                 );
@@ -229,7 +251,7 @@ class _DietScreenState extends State<DietScreen> {
                                     'quantity': quantity,
                                   }),
                                 )
-                                .timeout(const Duration(seconds: 45));
+                                .timeout(const Duration(seconds: 60));
 
                             if (aiRes.statusCode == 200) {
                               final aiData = json.decode(aiRes.body)['data'];
@@ -242,6 +264,7 @@ class _DietScreenState extends State<DietScreen> {
                                 'protein': (aiData['protein_g'] ?? 0.0).toDouble(),
                                 'carbs': (aiData['carbs_g'] ?? 0.0).toDouble(),
                                 'fat': (aiData['fat_g'] ?? 0.0).toDouble(),
+                                'log_date': dailyTracker.todayDateStr,
                               };
 
                               final mealRes = await http
@@ -250,10 +273,12 @@ class _DietScreenState extends State<DietScreen> {
                                     headers: {'Content-Type': 'application/json'},
                                     body: json.encode(mealPayload),
                                   )
-                                  .timeout(const Duration(seconds: 30));
+                                  .timeout(const Duration(seconds: 45));
 
-                              if (mealRes.statusCode == 200 || mealRes.statusCode == 201) {
-                                if (stateContext.mounted && Navigator.canPop(stateContext)) {
+                              if (mealRes.statusCode == 200 ||
+                                  mealRes.statusCode == 201) {
+                                if (stateContext.mounted &&
+                                    Navigator.canPop(stateContext)) {
                                   Navigator.pop(stateContext);
                                 }
 
@@ -272,10 +297,12 @@ class _DietScreenState extends State<DietScreen> {
                                   );
                                 }
                               } else {
-                                throw Exception("Failed to save meal: ${mealRes.statusCode}");
+                                throw Exception(
+                                    "Failed to save meal: ${mealRes.statusCode}");
                               }
                             } else {
-                              throw Exception("FitOak-AI Analysis Failed: ${aiRes.statusCode}");
+                              throw Exception(
+                                  "FitOak-AI Analysis Failed: ${aiRes.statusCode}");
                             }
                           } catch (e) {
                             setDialogState(() => isAnalyzing = false);
@@ -289,7 +316,9 @@ class _DietScreenState extends State<DietScreen> {
                             }
                           }
                         },
-                  child: const Text("Analyze & Log", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  child: const Text("Analyze & Log",
+                      style: TextStyle(
+                          color: Colors.black, fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -303,18 +332,30 @@ class _DietScreenState extends State<DietScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primaryTextColor = theme.colorScheme.onSurface;
-    final secondaryTextColor = theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
+    final secondaryTextColor =
+        theme.brightness == Brightness.dark ? Colors.grey : Colors.grey[700];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("Diet & Meal Tracker", style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Diet & Meal Tracker",
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: primaryTextColor)),
+            Text(
+              "Today (${dailyTracker.todayDateStr})",
+              style: TextStyle(fontSize: 12, color: secondaryTextColor),
+            ),
+          ],
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.orange),
             onPressed: _fetchUserMeals,
-            tooltip: "Refresh meals",
+            tooltip: "Refresh today's meals",
           ),
         ],
       ),
@@ -322,7 +363,8 @@ class _DietScreenState extends State<DietScreen> {
         onPressed: _showAddMealDialog,
         backgroundColor: Colors.orange,
         icon: const Icon(Icons.auto_awesome, color: Colors.black),
-        label: const Text("Log Meal", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        label: const Text("Log Meal",
+            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.orange))
@@ -333,7 +375,8 @@ class _DietScreenState extends State<DietScreen> {
                 padding: const EdgeInsets.all(16.0),
                 children: [
                   Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -342,10 +385,16 @@ class _DietScreenState extends State<DietScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text("Daily Calories", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryTextColor)),
+                              Text("Daily Calories",
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: primaryTextColor)),
                               Text(
                                 "${totalCalories.toInt()} / ${calorieGoal.toInt()} kcal",
-                                style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.bold),
                               ),
                             ],
                           ),
@@ -354,7 +403,8 @@ class _DietScreenState extends State<DietScreen> {
                             borderRadius: BorderRadius.circular(8),
                             child: LinearProgressIndicator(
                               value: (totalCalories / calorieGoal).clamp(0.0, 1.0),
-                              backgroundColor: Colors.orange.withValues(alpha: 0.15),
+                              backgroundColor:
+                                  Colors.orange.withValues(alpha: 0.15),
                               color: Colors.orange,
                               minHeight: 10,
                             ),
@@ -363,9 +413,25 @@ class _DietScreenState extends State<DietScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
-                              _buildMacroIndicator("Protein", totalProtein, proteinGoal, Colors.redAccent, "g", primaryTextColor, secondaryTextColor),
-                              _buildMacroIndicator("Carbs", totalCarbs, carbsGoal, Colors.blueAccent, "g", primaryTextColor, secondaryTextColor),
-                              _buildMacroIndicator("Fat", totalFat, fatGoal, Colors.amber, "g", primaryTextColor, secondaryTextColor),
+                              _buildMacroIndicator(
+                                  "Protein",
+                                  totalProtein,
+                                  proteinGoal,
+                                  Colors.redAccent,
+                                  "g",
+                                  primaryTextColor,
+                                  secondaryTextColor),
+                              _buildMacroIndicator(
+                                  "Carbs",
+                                  totalCarbs,
+                                  carbsGoal,
+                                  Colors.blueAccent,
+                                  "g",
+                                  primaryTextColor,
+                                  secondaryTextColor),
+                              _buildMacroIndicator("Fat", totalFat, fatGoal,
+                                  Colors.amber, "g", primaryTextColor,
+                                  secondaryTextColor),
                             ],
                           ),
                         ],
@@ -375,26 +441,33 @@ class _DietScreenState extends State<DietScreen> {
                   const SizedBox(height: 24),
                   Text(
                     "Today's Meals",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor),
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: primaryTextColor),
                   ),
                   const SizedBox(height: 12),
                   meals.isEmpty
                       ? Card(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
                           child: Padding(
                             padding: const EdgeInsets.all(32.0),
                             child: Column(
                               children: [
-                                Icon(Icons.no_meals, color: secondaryTextColor, size: 48),
+                                Icon(Icons.no_meals,
+                                    color: secondaryTextColor, size: 48),
                                 const SizedBox(height: 12),
                                 Text(
                                   "No meals logged today.",
-                                  style: TextStyle(color: secondaryTextColor, fontSize: 16),
+                                  style: TextStyle(
+                                      color: secondaryTextColor, fontSize: 16),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   "Tap 'Log Meal' below to auto-calculate macros with FitOak AI.",
-                                  style: TextStyle(color: secondaryTextColor, fontSize: 12),
+                                  style: TextStyle(
+                                      color: secondaryTextColor, fontSize: 12),
                                   textAlign: TextAlign.center,
                                 ),
                               ],
@@ -420,9 +493,12 @@ class _DietScreenState extends State<DietScreen> {
                                       onPressed: (context) async {
                                         try {
                                           final res = await http.delete(
-                                            Uri.parse('$backendUrl/api/meals/$mealId'),
+                                            Uri.parse(
+                                                '$backendUrl/api/meals/$mealId'),
                                           );
                                           if (res.statusCode == 200 && mounted) {
+                                            await dailyTracker
+                                                .fetchBackendMeals();
                                             await _fetchUserMeals();
                                           }
                                         } catch (e) {
@@ -439,33 +515,47 @@ class _DietScreenState extends State<DietScreen> {
                                 ),
                                 child: Card(
                                   margin: EdgeInsets.zero,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
                                   child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 8),
                                     leading: Container(
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: Colors.orange.withValues(alpha: 0.15),
+                                        color:
+                                            Colors.orange.withValues(alpha: 0.15),
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Icon(Icons.restaurant_menu, color: Colors.orange),
+                                      child: const Icon(Icons.restaurant_menu,
+                                          color: Colors.orange),
                                     ),
                                     title: Text(
                                       meal['name'] ?? 'Meal',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryTextColor),
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: primaryTextColor),
                                     ),
                                     subtitle: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        if ((meal['quantity'] ?? '').toString().isNotEmpty)
+                                        if ((meal['quantity'] ?? '')
+                                            .toString()
+                                            .isNotEmpty)
                                           Text(
                                             "Portion: ${meal['quantity']}",
-                                            style: TextStyle(color: secondaryTextColor, fontSize: 12),
+                                            style: TextStyle(
+                                                color: secondaryTextColor,
+                                                fontSize: 12),
                                           ),
                                         const SizedBox(height: 4),
                                         Text(
                                           "P: ${meal['protein']}g | C: ${meal['carbs']}g | F: ${meal['fat']}g",
-                                          style: TextStyle(color: secondaryTextColor, fontSize: 12),
+                                          style: TextStyle(
+                                              color: secondaryTextColor,
+                                              fontSize: 12),
                                         ),
                                       ],
                                     ),
@@ -501,7 +591,11 @@ class _DietScreenState extends State<DietScreen> {
     final progress = (current / goal).clamp(0.0, 1.0);
     return Column(
       children: [
-        Text(title, style: TextStyle(color: secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+        Text(title,
+            style: TextStyle(
+                color: secondaryTextColor,
+                fontSize: 12,
+                fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         Stack(
           alignment: Alignment.center,
@@ -518,12 +612,16 @@ class _DietScreenState extends State<DietScreen> {
             ),
             Text(
               "${current.toInt()}$unit",
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryTextColor),
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: primaryTextColor),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        Text("/ ${goal.toInt()}$unit", style: TextStyle(color: secondaryTextColor, fontSize: 10)),
+        Text("/ ${goal.toInt()}$unit",
+            style: TextStyle(color: secondaryTextColor, fontSize: 10)),
       ],
     );
   }

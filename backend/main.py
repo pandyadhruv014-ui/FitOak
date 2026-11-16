@@ -4,8 +4,10 @@ import re
 import time
 import random
 import traceback
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, status, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, status, Request, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -16,7 +18,6 @@ import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
 from dotenv import load_dotenv
 import urllib.request
-import urllib.parse
 
 import database
 import models
@@ -24,8 +25,14 @@ from database import engine, get_db
 
 load_dotenv()
 
-# In-Memory OTP Store (Email -> "123456")
 otp_store = {}
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def get_ist_today_str() -> str:
+    return datetime.now(IST).strftime("%Y-%m-%d")
+
+def get_ist_now() -> datetime:
+    return datetime.now(IST).replace(tzinfo=None)
 
 # --- Automatic SQL Table & Column Patching ---
 def sync_database_schema():
@@ -58,6 +65,8 @@ def sync_database_schema():
         incline FLOAT DEFAULT 0.0,
         calories_burned INTEGER DEFAULT 0,
         estimated_fat_loss_g FLOAT DEFAULT 0.0,
+        logged_by VARCHAR(255) DEFAULT '',
+        log_date VARCHAR(20) DEFAULT '',
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -70,10 +79,41 @@ def sync_database_schema():
         protein FLOAT DEFAULT 0.0,
         carbs FLOAT DEFAULT 0.0,
         fat FLOAT DEFAULT 0.0,
+        log_date VARCHAR(20) DEFAULT '',
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Automatically patch missing columns on existing tables
+    CREATE TABLE IF NOT EXISTS water_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        log_date VARCHAR(20) NOT NULL,
+        glasses INTEGER DEFAULT 0,
+        ml_total INTEGER DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, log_date)
+    );
+
+    CREATE TABLE IF NOT EXISTS gym_groups (
+        id SERIAL PRIMARY KEY,
+        group_name VARCHAR(120) NOT NULL,
+        entry_pass VARCHAR(32) UNIQUE NOT NULL,
+        created_by INTEGER NOT NULL,
+        gym_reminder_hour INTEGER DEFAULT NULL,
+        gym_reminder_minute INTEGER DEFAULT NULL,
+        reminder_updated_by VARCHAR(120) DEFAULT '',
+        reminder_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS gym_group_members (
+        id SERIAL PRIMARY KEY,
+        group_id INTEGER REFERENCES gym_groups(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        user_name VARCHAR(255) NOT NULL,
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(group_id, user_id)
+    );
+
+    -- Patch existing tables safely
     ALTER TABLE workouts ADD COLUMN IF NOT EXISTS user_id INTEGER;
     ALTER TABLE workouts ADD COLUMN IF NOT EXISTS workout_type VARCHAR(50) DEFAULT 'Strength';
     ALTER TABLE workouts ADD COLUMN IF NOT EXISTS muscle VARCHAR(100);
@@ -85,6 +125,8 @@ def sync_database_schema():
     ALTER TABLE workouts ADD COLUMN IF NOT EXISTS incline FLOAT DEFAULT 0.0;
     ALTER TABLE workouts ADD COLUMN IF NOT EXISTS calories_burned INTEGER DEFAULT 0;
     ALTER TABLE workouts ADD COLUMN IF NOT EXISTS estimated_fat_loss_g FLOAT DEFAULT 0.0;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS logged_by VARCHAR(255) DEFAULT '';
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS log_date VARCHAR(20) DEFAULT '';
 
     ALTER TABLE meals ADD COLUMN IF NOT EXISTS user_id INTEGER;
     ALTER TABLE meals ADD COLUMN IF NOT EXISTS name VARCHAR(255);
@@ -93,11 +135,22 @@ def sync_database_schema():
     ALTER TABLE meals ADD COLUMN IF NOT EXISTS protein FLOAT DEFAULT 0.0;
     ALTER TABLE meals ADD COLUMN IF NOT EXISTS carbs FLOAT DEFAULT 0.0;
     ALTER TABLE meals ADD COLUMN IF NOT EXISTS fat FLOAT DEFAULT 0.0;
+    ALTER TABLE meals ADD COLUMN IF NOT EXISTS log_date VARCHAR(20) DEFAULT '';
+
+    -- Backfill log_date from timestamp for legacy rows so historical rows don't show up as today
+    UPDATE meals
+    SET log_date = TO_CHAR((timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD')
+    WHERE (log_date IS NULL OR log_date = '') AND timestamp IS NOT NULL;
+
+    UPDATE workouts
+    SET log_date = TO_CHAR((timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD')
+    WHERE (log_date IS NULL OR log_date = '') AND timestamp IS NOT NULL;
 
     CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
     CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
-    CREATE INDEX IF NOT EXISTS ix_meals_user_id ON meals (user_id);
-    CREATE INDEX IF NOT EXISTS ix_workouts_user_id ON workouts (user_id);
+    CREATE INDEX IF NOT EXISTS ix_meals_user_date ON meals (user_id, log_date);
+    CREATE INDEX IF NOT EXISTS ix_workouts_user_date ON workouts (user_id, log_date);
+    CREATE INDEX IF NOT EXISTS ix_water_user_date ON water_logs (user_id, log_date);
     """
     try:
         with engine.begin() as conn:
@@ -110,18 +163,12 @@ def sync_database_schema():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Starting FitOak Backend...")
-    db_url = os.getenv("DATABASE_URL", "NOT_SET")
-    print(f"📊 DATABASE_URL configured: {db_url[:50]}..." if db_url != "NOT_SET" else "❌ DATABASE_URL NOT SET!")
-    
     sync_database_schema()
-    
     try:
         models.Base.metadata.create_all(bind=engine)
         print("✅ SQLAlchemy models initialized")
     except Exception as e:
         print(f"❌ ORM initialization error: {e}")
-        print(traceback.format_exc())
-    
     yield
     print("🛑 Shutting down FitOak Backend...")
 
@@ -154,9 +201,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    print("✅ Gemini AI configured successfully")
-else:
-    print("⚠️ GEMINI_API_KEY not found in environment")
 
 CANDIDATE_MODELS = [
     'gemini-3.8-flash',
@@ -176,34 +220,26 @@ def generate_with_resilience(prompt: str, force_json: bool = False) -> str:
     )
 
     last_error = None
-
     for model_name in CANDIDATE_MODELS:
         try:
             model = genai.GenerativeModel(
                 model_name=model_name,
                 generation_config=generation_config
             )
-            response = model.generate_content(
-                prompt,
-                request_options={"timeout": 15}
-            )
+            response = model.generate_content(prompt, request_options={"timeout": 15})
             if response and response.text:
                 return response.text.strip()
         except google_exceptions.ResourceExhausted as rate_err:
-            print(f"⚠️ Model {model_name} rate-limited (429): {rate_err}")
             last_error = str(rate_err)
             time.sleep(0.5)
             continue
         except Exception as e:
-            print(f"⚠️ Model {model_name} failed: {e}")
             last_error = str(e)
             continue
 
-    raise HTTPException(
-        status_code=503,
-        detail=f"FitOak-AI failed on all fallback models. Details: {last_error}"
-    )
+    raise HTTPException(status_code=503, detail=f"FitOak-AI failed on all fallback models. Details: {last_error}")
 
+# --- Pydantic Models ---
 class UserRegister(BaseModel):
     name: str
     email: str
@@ -244,6 +280,9 @@ class WorkoutCreate(BaseModel):
     duration_mins: int = 0
     speed_kmh: float = 0.0
     incline: float = 0.0
+    log_date: Optional[str] = None
+    buddy_user_ids: List[int] = []
+    logged_by_name: str = ""
 
 class MealCreate(BaseModel):
     user_id: int
@@ -253,54 +292,61 @@ class MealCreate(BaseModel):
     protein: float
     carbs: float
     fat: float
+    log_date: Optional[str] = None
 
-# --- HELPER: ASYNCHRONOUS HTTPS EMAIL DISPATCH ---
+class WaterLogUpdate(BaseModel):
+    user_id: int
+    glasses: int
+    ml_total: int = 0
+    log_date: Optional[str] = None
+
+class GroupCreateRequest(BaseModel):
+    user_id: int
+    user_name: str
+    group_name: str
+    entry_pass: str
+
+class GroupJoinRequest(BaseModel):
+    user_id: int
+    user_name: str
+    entry_pass: str
+
+class GroupReminderUpdate(BaseModel):
+    user_id: int
+    user_name: str
+    hour: int
+    minute: int
+
+class DeleteAccountRequest(BaseModel):
+    user_id: int
+    password: str
+
+# --- Email Helper ---
 def send_smtp_email_async(to_email: str, otp_code: str):
     api_key = os.getenv("BREVO_API_KEY")
     sender_email = os.getenv("SENDER_EMAIL", "fitoak.recovery@gmail.com")
-
     if not api_key:
-        print("❌ HTTPS MAIL SKIPPED: BREVO_API_KEY environment variable is missing on Render!")
         return
-
     url = "https://api.brevo.com/v3/smtp/email"
-    headers = {
-        "accept": "application/json",
-        "api-key": api_key,
-        "content-type": "application/json"
-    }
-
+    headers = {"accept": "application/json", "api-key": api_key, "content-type": "application/json"}
     html_content = f"""
     <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #1e1e1e; color: #ffffff; border-radius: 10px;">
         <h2 style="color: #ff5722;">FitOak Password Reset</h2>
         <p>Your 6-digit verification code is:</p>
         <h1 style="color: #ff5722; letter-spacing: 4px;">{otp_code}</h1>
-        <p style="color: #888888;">If you did not request this code, please ignore this email.</p>
     </div>
     """
-
     payload = {
-        "sender": {
-            "name": "FitOak Security",
-            "email": sender_email
-        },
-        "to": [
-            {
-                "email": to_email
-            }
-        ],
+        "sender": {"name": "FitOak Security", "email": sender_email},
+        "to": [{"email": to_email}],
         "subject": "FitOak Password Reset Code",
         "htmlContent": html_content
     }
-
     try:
-        print(f"🔄 Sending email from {sender_email} to {to_email} via HTTPS REST API (Port 443)...")
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-
-        with urllib.request.urlopen(req, timeout=15) as response:
-            res_body = response.read().decode("utf-8")
-            print(f"✉️ SUCCESS: Password reset email sent via HTTPS API to {to_email}! Status: {response.status}")
+        with urllib.request.urlopen(req, timeout=15):
+            pass
     except Exception as mail_err:
         print(f"❌ HTTPS API ERROR: {mail_err}")
 
@@ -310,217 +356,60 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "FitOak FastAPI Engine"}
-
-@app.get("/debug/db-status")
-def debug_db_status():
-    try:
-        db_url = os.getenv("DATABASE_URL", "NOT_SET")
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT version();"))
-            pg_version = result.fetchone()[0]
-            tables_result = conn.execute(text("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public';
-            """))
-            tables = [row[0] for row in tables_result.fetchall()]
-            users_count = conn.execute(text("SELECT COUNT(*) FROM users;")).fetchone()[0]
-            meals_count = conn.execute(text("SELECT COUNT(*) FROM meals;")).fetchone()[0]
-            workouts_count = conn.execute(text("SELECT COUNT(*) FROM workouts;")).fetchone()[0]
-            
-            return {
-                "status": "healthy",
-                "database_url_set": db_url != "NOT_SET",
-                "database_url_prefix": db_url[:30] if db_url != "NOT_SET" else "NOT_SET",
-                "postgres_version": pg_version,
-                "tables": tables,
-                "record_counts": {
-                    "users": users_count,
-                    "meals": meals_count,
-                    "workouts": workouts_count
-                }
-            }
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
+    return {"status": "ok", "service": "FitOak FastAPI Engine", "ist_date": get_ist_today_str()}
 
 # --- AUTHENTICATION ENDPOINTS ---
 @app.post("/api/register")
 @app.post("/api/auth/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
-    try:
-        sync_database_schema()
-        existing_user = db.query(models.User).filter(models.User.email == user.email).first()
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered. Please login instead."
-            )
-        
-        hashed_password = pwd_context.hash(user.password)
-        
-        db_user = models.User(
-            name=user.name,
-            email=user.email,
-            password=hashed_password,
-            dob=user.dob,
-            height_cm=user.height_cm,
-            weight_kg=user.weight_kg,
-            age=user.age,
-            gender=user.gender,
-            goal=user.goal
-        )
-        db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
-        
-        return {
-            "status": "success",
-            "message": "User registered successfully!",
-            "userId": db_user.id,
+    existing_user = db.query(models.User).filter(models.User.email == user.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered. Please login instead.")
+    hashed_password = pwd_context.hash(user.password)
+    db_user = models.User(
+        name=user.name,
+        email=user.email,
+        password=hashed_password,
+        dob=user.dob,
+        height_cm=user.height_cm,
+        weight_kg=user.weight_kg,
+        age=user.age,
+        gender=user.gender,
+        goal=user.goal
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return {
+        "status": "success",
+        "message": "User registered successfully!",
+        "userId": db_user.id,
+        "id": db_user.id,
+        "token": f"fitoak_token_{db_user.id}",
+        "user": {
             "id": db_user.id,
-            "token": f"fitoak_token_{db_user.id}",
-            "user": {
-                "id": db_user.id,
-                "name": db_user.name,
-                "email": db_user.email,
-                "dob": db_user.dob,
-                "height_cm": db_user.height_cm,
-                "weight_kg": db_user.weight_kg
-            }
+            "name": db_user.name,
+            "email": db_user.email,
+            "dob": db_user.dob,
+            "height_cm": db_user.height_cm,
+            "weight_kg": db_user.weight_kg
         }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Registration error: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+    }
 
 @app.post("/api/login")
 @app.post("/api/auth/login")
 def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
-    try:
-        sync_database_schema()
-        user = db.query(models.User).filter(models.User.email == credentials.email).first()
-        
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found. Please register first."
-            )
-        
-        if not pwd_context.verify(credentials.password, user.password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect password. Please try again."
-            )
-        
-        return {
-            "status": "success",
-            "message": "Login successful",
-            "userId": user.id,
+    user = db.query(models.User).filter(models.User.email == credentials.email).first()
+    if not user or not pwd_context.verify(credentials.password, user.password):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    return {
+        "status": "success",
+        "message": "Login successful",
+        "userId": user.id,
+        "id": user.id,
+        "token": f"fitoak_token_{user.id}",
+        "user": {
             "id": user.id,
-            "token": f"fitoak_token_{user.id}",
-            "user": {
-                "id": user.id,
-                "name": user.name,
-                "email": user.email,
-                "dob": user.dob,
-                "height_cm": user.height_cm,
-                "weight_kg": user.weight_kg,
-                "age": user.age,
-                "gender": user.gender,
-                "goal": user.goal
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Login error: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
-
-# --- FORGOT & RESET PASSWORD ENDPOINTS ---
-@app.post("/api/auth/forgot-password")
-@app.post("/api/forgot-password")
-def request_password_reset(
-    request: ForgotPasswordRequest, 
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    try:
-        user = db.query(models.User).filter(models.User.email == request.email).first()
-        if not user:
-            raise HTTPException(
-                status_code=404,
-                detail="No account registered with this email address."
-            )
-        
-        # Generate 6-digit OTP
-        otp_code = str(random.randint(100000, 999999))
-        otp_store[request.email] = otp_code
-        
-        # Dispatch email asynchronously in background
-        background_tasks.add_task(send_smtp_email_async, request.email, otp_code)
-
-        # Return clean success message without otp_preview
-        return {
-            "status": "success",
-            "message": "A 6-digit verification code has been sent to your email address."
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Forgot password error: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate reset code: {str(e)}")
-
-@app.post("/api/auth/reset-password")
-@app.post("/api/reset-password")
-def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
-    try:
-        stored_otp = otp_store.get(request.email)
-        if not stored_otp or stored_otp != request.otp.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid or expired OTP verification code."
-            )
-        
-        user = db.query(models.User).filter(models.User.email == request.email).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User account not found.")
-        
-        # Update and hash new password
-        user.password = pwd_context.hash(request.new_password)
-        db.commit()
-        
-        # Clear used OTP
-        otp_store.pop(request.email, None)
-        
-        return {
-            "status": "success",
-            "message": "Password updated successfully! Please log in with your new password."
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        print(f"❌ Reset password error: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to reset password: {str(e)}")
-
-@app.get("/api/user/{user_id}")
-@app.get("/api/auth/me")
-def get_user_profile(user_id: int = 1, db: Session = Depends(get_db)):
-    try:
-        user = db.query(models.User).filter(models.User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        return {
-            "id": user.id,
-            "userId": user.id,
             "name": user.name,
             "email": user.email,
             "dob": user.dob,
@@ -530,63 +419,59 @@ def get_user_profile(user_id: int = 1, db: Session = Depends(get_db)):
             "gender": user.gender,
             "goal": user.goal
         }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Get user error: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to get user: {str(e)}")
+    }
 
-class DeleteAccountRequest(BaseModel):
-    user_id: int
-    password: str
+@app.post("/api/auth/forgot-password")
+@app.post("/api/forgot-password")
+def request_password_reset(request: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="No account registered with this email address.")
+    otp_code = str(random.randint(100000, 999999))
+    otp_store[request.email] = otp_code
+    background_tasks.add_task(send_smtp_email_async, request.email, otp_code)
+    return {"status": "success", "message": "A 6-digit verification code has been sent to your email address."}
+
+@app.post("/api/auth/reset-password")
+@app.post("/api/reset-password")
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    stored_otp = otp_store.get(request.email)
+    if not stored_otp or stored_otp != request.otp.strip():
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP verification code.")
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User account not found.")
+    user.password = pwd_context.hash(request.new_password)
+    db.commit()
+    otp_store.pop(request.email, None)
+    return {"status": "success", "message": "Password updated successfully!"}
 
 @app.delete("/api/user/delete")
 def delete_user_account(request: DeleteAccountRequest, db: Session = Depends(get_db)):
-    try:
-        sync_database_schema()
+    user = db.query(models.User).filter(models.User.id == request.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not pwd_context.verify(request.password, user.password):
+        raise HTTPException(status_code=401, detail="Incorrect password. Account deletion cancelled.")
+    db.query(models.Meal).filter(models.Meal.user_id == request.user_id).delete()
+    db.query(models.Workout).filter(models.Workout.user_id == request.user_id).delete()
+    db.execute(text("DELETE FROM water_logs WHERE user_id = :uid"), {"uid": request.user_id})
+    db.execute(text("DELETE FROM gym_group_members WHERE user_id = :uid"), {"uid": request.user_id})
+    db.delete(user)
+    db.commit()
+    return {"status": "success", "message": "Account and all associated data deleted successfully"}
 
-        user = db.query(models.User).filter(models.User.id == request.user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        if not pwd_context.verify(request.password, user.password):
-            raise HTTPException(
-                status_code=401,
-                detail="Incorrect password. Account deletion cancelled."
-            )
-
-        db.query(models.Meal).filter(models.Meal.user_id == request.user_id).delete()
-        db.query(models.Workout).filter(models.Workout.user_id == request.user_id).delete()
-        db.delete(user)
-        db.commit()
-
-        return {
-            "status": "success",
-            "message": "Account and all associated data deleted successfully"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        print(f"❌ Delete account error: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")
-
-# --- GEMINI AI NUTRITION & CHAT ENDPOINTS ---
+# --- GEMINI AI ENDPOINTS ---
 @app.post("/api/ai/nutrition")
 def analyze_nutrition(request: NutritionRequest):
     dish = request.dish_name.strip()
     qty = request.quantity.strip() if request.quantity else "1 portion"
-
     if not dish:
         raise HTTPException(status_code=400, detail="Dish name cannot be empty.")
 
     prompt = f"""
     You are an accurate nutritional database engine. Calculate real-time estimated macros for:
     Food: "{dish}", Portion: "{qty}".
-
-    Provide accurate, genuine numbers for this exact portion.
     Return ONLY a raw JSON object string without markdown code blocks or extra text:
     {{
       "meal_name": "{dish} ({qty})",
@@ -596,15 +481,10 @@ def analyze_nutrition(request: NutritionRequest):
       "fat_g": 8.0
     }}
     """
-
     raw_text = generate_with_resilience(prompt, force_json=True)
-
     try:
         cleaned = re.sub(r'```json\s*|\s*```', '', raw_text).strip()
         json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        if not json_match:
-            raise ValueError("No JSON object found in AI response.")
-
         data = json.loads(json_match.group(0))
         sanitized_data = {
             "meal_name": str(data.get("meal_name", f"{dish} ({qty})")),
@@ -614,123 +494,406 @@ def analyze_nutrition(request: NutritionRequest):
             "fat_g": round(float(data.get("fat_g", 0.0)), 1),
         }
         return {"status": "success", "data": sanitized_data}
-    except Exception as parse_err:
-        print(f"❌ Nutrition JSON parse error on '{raw_text}': {parse_err}")
-        raise HTTPException(
-            status_code=500,
-            detail="FitOak-AI returned an unexpected format. Please try again."
-        )
+    except Exception:
+        raise HTTPException(status_code=500, detail="FitOak-AI returned an unexpected format. Please try again.")
 
 @app.post("/api/ai/chat")
 def ai_chat_handler(request: AIChatRequest):
     if not request.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
-
     reply = generate_with_resilience(request.prompt, force_json=False)
     return {"status": "success", "response": reply}
 
-# --- POSTGRESQL DATABASE SYNC ENDPOINTS ---
+# --- DATE-FILTERED MEALS ENDPOINTS (Fixes New-Day Reset Bug) ---
+@app.post("/api/meals")
+def create_meal(meal: MealCreate, db: Session = Depends(get_db)):
+    target_date = meal.log_date if meal.log_date else get_ist_today_str()
+    try:
+        result = db.execute(
+            text("""
+                INSERT INTO meals (user_id, name, quantity, calories, protein, carbs, fat, log_date, timestamp)
+                VALUES (:user_id, :name, :quantity, :calories, :protein, :carbs, :fat, :log_date, :ts)
+                RETURNING id, user_id, name, quantity, calories, protein, carbs, fat, log_date
+            """),
+            {
+                "user_id": meal.user_id,
+                "name": meal.name,
+                "quantity": meal.quantity,
+                "calories": meal.calories,
+                "protein": meal.protein,
+                "carbs": meal.carbs,
+                "fat": meal.fat,
+                "log_date": target_date,
+                "ts": get_ist_now(),
+            },
+        )
+        row = result.fetchone()
+        db.commit()
+        return {"status": "success", "meal": dict(row._mapping)}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create meal: {str(e)}")
+
+@app.get("/api/meals/{user_id}")
+def get_user_meals(user_id: int, date: Optional[str] = Query(default=None), db: Session = Depends(get_db)):
+    target_date = date if date else get_ist_today_str()
+    try:
+        rows = db.execute(
+            text("""
+                SELECT id, user_id, name, quantity, calories, protein, carbs, fat, log_date
+                FROM meals
+                WHERE user_id = :uid AND log_date = :target_date
+                ORDER BY id ASC
+            """),
+            {"uid": user_id, "target_date": target_date},
+        ).fetchall()
+        return {"status": "success", "date": target_date, "meals": [dict(r._mapping) for r in rows]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch meals: {str(e)}")
+
+@app.get("/api/meals/weekly/{user_id}")
+def get_weekly_meals_summary(user_id: int, db: Session = Depends(get_db)):
+    today = datetime.now(IST).date()
+    start_of_week = today - timedelta(days=today.weekday())  # Monday
+    dates = [(start_of_week + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+
+    rows = db.execute(
+        text("""
+            SELECT log_date, COALESCE(SUM(calories), 0) AS total_calories
+            FROM meals
+            WHERE user_id = :uid AND log_date = ANY(:dates)
+            GROUP BY log_date
+        """),
+        {"uid": user_id, "dates": dates},
+    ).fetchall()
+    totals_map = {r.log_date: int(r.total_calories) for r in rows}
+    return {
+        "status": "success",
+        "days": [{"date": d, "calories": totals_map.get(d, 0)} for d in dates],
+    }
+
+@app.delete("/api/meals/{meal_id}")
+def delete_meal(meal_id: int, db: Session = Depends(get_db)):
+    db.execute(text("DELETE FROM meals WHERE id = :mid"), {"mid": meal_id})
+    db.commit()
+    return {"status": "success", "message": "Meal deleted successfully"}
+
+# --- WORKOUTS + CO-LOGGING FOR GYM BUDDIES ---
 @app.post("/api/workouts")
 def create_workout(workout: WorkoutCreate, db: Session = Depends(get_db)):
+    target_date = workout.log_date if workout.log_date else get_ist_today_str()
     try:
-        calories = 0
-        fat_loss = 0.0
-        
         if workout.workout_type == "Cardio":
             calories = int(workout.duration_mins * (workout.speed_kmh * 0.8 + 3.0))
             fat_loss = round((calories / 7700.0) * 1000.0, 2)
         else:
             calories = workout.sets_count * 15
+            fat_loss = 0.0
 
-        db_workout = models.Workout(
-            user_id=workout.user_id,
-            workout_type=workout.workout_type,
-            muscle=workout.muscle,
-            exercise=workout.exercise,
-            sets_count=workout.sets_count,
-            max_weight=workout.max_weight,
-            duration_mins=workout.duration_mins,
-            speed_kmh=workout.speed_kmh,
-            incline=workout.incline,
-            calories_burned=calories,
-            estimated_fat_loss_g=fat_loss
+        now_ist = get_ist_now()
+        # Insert for primary user
+        res = db.execute(
+            text("""
+                INSERT INTO workouts (
+                    user_id, workout_type, muscle, exercise, sets_count, max_weight,
+                    duration_mins, speed_kmh, incline, calories_burned, estimated_fat_loss_g,
+                    logged_by, log_date, timestamp
+                )
+                VALUES (
+                    :user_id, :workout_type, :muscle, :exercise, :sets_count, :max_weight,
+                    :duration_mins, :speed_kmh, :incline, :calories_burned, :estimated_fat_loss_g,
+                    '', :log_date, :ts
+                )
+                RETURNING *
+            """),
+            {
+                "user_id": workout.user_id,
+                "workout_type": workout.workout_type,
+                "muscle": workout.muscle,
+                "exercise": workout.exercise,
+                "sets_count": workout.sets_count,
+                "max_weight": workout.max_weight,
+                "duration_mins": workout.duration_mins,
+                "speed_kmh": workout.speed_kmh,
+                "incline": workout.incline,
+                "calories_burned": calories,
+                "estimated_fat_loss_g": fat_loss,
+                "log_date": target_date,
+                "ts": now_ist,
+            },
         )
-        db.add(db_workout)
+        created_row = dict(res.fetchone()._mapping)
+
+        # Also log identical exercise for any selected gym buddies
+        unique_buddies = {bid for bid in workout.buddy_user_ids if bid > 0 and bid != workout.user_id}
+        logger_label = workout.logged_by_name.strip() or f"Buddy #{workout.user_id}"
+        for buddy_id in unique_buddies:
+            db.execute(
+                text("""
+                    INSERT INTO workouts (
+                        user_id, workout_type, muscle, exercise, sets_count, max_weight,
+                        duration_mins, speed_kmh, incline, calories_burned, estimated_fat_loss_g,
+                        logged_by, log_date, timestamp
+                    )
+                    VALUES (
+                        :user_id, :workout_type, :muscle, :exercise, :sets_count, :max_weight,
+                        :duration_mins, :speed_kmh, :incline, :calories_burned, :estimated_fat_loss_g,
+                        :logged_by, :log_date, :ts
+                    )
+                """),
+                {
+                    "user_id": buddy_id,
+                    "workout_type": workout.workout_type,
+                    "muscle": workout.muscle,
+                    "exercise": workout.exercise,
+                    "sets_count": workout.sets_count,
+                    "max_weight": workout.max_weight,
+                    "duration_mins": workout.duration_mins,
+                    "speed_kmh": workout.speed_kmh,
+                    "incline": workout.incline,
+                    "calories_burned": calories,
+                    "estimated_fat_loss_g": fat_loss,
+                    "logged_by": logger_label,
+                    "log_date": target_date,
+                    "ts": now_ist,
+                },
+            )
+
         db.commit()
-        db.refresh(db_workout)
-        return {"status": "success", "workout": db_workout}
+        return {
+            "status": "success",
+            "workout": created_row,
+            "shared_with_count": len(unique_buddies),
+        }
     except Exception as e:
-        print(f"❌ Create workout error: {e}")
-        print(traceback.format_exc())
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create workout: {str(e)}")
 
 @app.get("/api/workouts/{user_id}")
-def get_user_workouts(user_id: int, db: Session = Depends(get_db)):
+def get_user_workouts(user_id: int, date: Optional[str] = Query(default=None), db: Session = Depends(get_db)):
+    target_date = date if date else get_ist_today_str()
     try:
-        print(f"📊 Fetching workouts for user_id: {user_id}")
-        workouts = db.query(models.Workout).filter(models.Workout.user_id == user_id).all()
-        print(f"✅ Found {len(workouts)} workouts")
-        return {"status": "success", "workouts": workouts}
+        rows = db.execute(
+            text("""
+                SELECT *
+                FROM workouts
+                WHERE user_id = :uid AND log_date = :target_date
+                ORDER BY id ASC
+            """),
+            {"uid": user_id, "target_date": target_date},
+        ).fetchall()
+        return {"status": "success", "date": target_date, "workouts": [dict(r._mapping) for r in rows]}
     except Exception as e:
-        print(f"❌ Get workouts error: {e}")
-        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch workouts: {str(e)}")
-
-@app.post("/api/meals")
-def create_meal(meal: MealCreate, db: Session = Depends(get_db)):
-    try:
-        print(f"📥 Creating meal for user_id: {meal.user_id}, name: {meal.name}")
-        
-        db_meal = models.Meal(
-            user_id=meal.user_id,
-            name=meal.name,
-            quantity=meal.quantity,
-            calories=meal.calories,
-            protein=meal.protein,
-            carbs=meal.carbs,
-            fat=meal.fat
-        )
-        db.add(db_meal)
-        db.commit()
-        db.refresh(db_meal)
-        
-        print(f"✅ Meal created successfully with id: {db_meal.id}")
-        return {"status": "success", "meal": db_meal}
-    except Exception as e:
-        print(f"❌ Create meal error: {e}")
-        print(traceback.format_exc())
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to create meal: {str(e)}")
-
-@app.get("/api/meals/{user_id}")
-def get_user_meals(user_id: int, db: Session = Depends(get_db)):
-    try:
-        print(f"📊 Fetching meals for user_id: {user_id}")
-        meals = db.query(models.Meal).filter(models.Meal.user_id == user_id).all()
-        print(f"✅ Found {len(meals)} meals")
-        return {"status": "success", "meals": meals}
-    except Exception as e:
-        print(f"❌ Get meals error: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to fetch meals: {str(e)}")
-
-@app.delete("/api/meals/{meal_id}")
-def delete_meal(meal_id: int, db: Session = Depends(get_db)):
-    meal = db.query(models.Meal).filter(models.Meal.id == meal_id).first()
-    if not meal:
-        raise HTTPException(status_code=404, detail="Meal not found")
-    db.delete(meal)
-    db.commit()
-    return {"status": "success", "message": "Meal deleted successfully"}
 
 @app.delete("/api/workouts/{workout_id}")
 def delete_workout(workout_id: int, db: Session = Depends(get_db)):
-    workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
-    if not workout:
-        raise HTTPException(status_code=404, detail="Workout not found")
-    db.delete(workout)
+    db.execute(text("DELETE FROM workouts WHERE id = :wid"), {"wid": workout_id})
     db.commit()
     return {"status": "success", "message": "Workout deleted successfully"}
+
+# --- WATER WEEKLY TRACKING ENDPOINTS ---
+@app.post("/api/water")
+def upsert_water_log(payload: WaterLogUpdate, db: Session = Depends(get_db)):
+    target_date = payload.log_date if payload.log_date else get_ist_today_str()
+    ml_val = payload.ml_total if payload.ml_total > 0 else payload.glasses * 250
+    try:
+        db.execute(
+            text("""
+                INSERT INTO water_logs (user_id, log_date, glasses, ml_total, updated_at)
+                VALUES (:uid, :log_date, :glasses, :ml_total, :ts)
+                ON CONFLICT (user_id, log_date)
+                DO UPDATE SET glasses = EXCLUDED.glasses, ml_total = EXCLUDED.ml_total, updated_at = EXCLUDED.updated_at
+            """),
+            {
+                "uid": payload.user_id,
+                "log_date": target_date,
+                "glasses": payload.glasses,
+                "ml_total": ml_val,
+                "ts": get_ist_now(),
+            },
+        )
+        db.commit()
+        return {"status": "success", "date": target_date, "glasses": payload.glasses}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to sync water log: {str(e)}")
+
+@app.get("/api/water/weekly/{user_id}")
+def get_weekly_water(user_id: int, db: Session = Depends(get_db)):
+    today = datetime.now(IST).date()
+    start_of_week = today - timedelta(days=today.weekday())  # Monday
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    dates = [(start_of_week + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+
+    rows = db.execute(
+        text("""
+            SELECT log_date, glasses, ml_total
+            FROM water_logs
+            WHERE user_id = :uid AND log_date = ANY(:dates)
+        """),
+        {"uid": user_id, "dates": dates},
+    ).fetchall()
+
+    water_map = {r.log_date: {"glasses": r.glasses, "ml_total": r.ml_total} for r in rows}
+    today_str = today.strftime("%Y-%m-%d")
+
+    weekly_list = []
+    for i, d in enumerate(dates):
+        entry = water_map.get(d, {"glasses": 0, "ml_total": 0})
+        weekly_list.append({
+            "date": d,
+            "day": day_names[i],
+            "is_today": d == today_str,
+            "glasses": entry["glasses"],
+            "ml_total": entry["ml_total"],
+        })
+
+    return {"status": "success", "weekly": weekly_list}
+
+# --- GYM BUDDY GROUPS ENDPOINTS ---
+@app.post("/api/groups/create")
+def create_gym_group(req: GroupCreateRequest, db: Session = Depends(get_db)):
+    clean_pass = req.entry_pass.strip().upper()
+    if len(clean_pass) < 4:
+        raise HTTPException(status_code=400, detail="Entry pass must be at least 4 characters.")
+
+    existing = db.execute(
+        text("SELECT id FROM gym_groups WHERE entry_pass = :pass"),
+        {"pass": clean_pass},
+    ).fetchone()
+    if existing:
+        raise HTTPException(status_code=400, detail="This entry pass is already taken. Choose another pass.")
+
+    try:
+        res = db.execute(
+            text("""
+                INSERT INTO gym_groups (group_name, entry_pass, created_by)
+                VALUES (:name, :pass, :uid)
+                RETURNING id, group_name, entry_pass, created_by, gym_reminder_hour, gym_reminder_minute, reminder_updated_by, reminder_updated_at
+            """),
+            {"name": req.group_name.strip(), "pass": clean_pass, "uid": req.user_id},
+        )
+        group = dict(res.fetchone()._mapping)
+
+        db.execute(
+            text("""
+                INSERT INTO gym_group_members (group_id, user_id, user_name)
+                VALUES (:gid, :uid, :uname)
+                ON CONFLICT (group_id, user_id) DO NOTHING
+            """),
+            {"gid": group["id"], "uid": req.user_id, "uname": req.user_name.strip()},
+        )
+        db.commit()
+        return {"status": "success", "group": _build_group_payload(db, group["id"])}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create group: {str(e)}")
+
+@app.post("/api/groups/join")
+def join_gym_group(req: GroupJoinRequest, db: Session = Depends(get_db)):
+    clean_pass = req.entry_pass.strip().upper()
+    row = db.execute(
+        text("SELECT id FROM gym_groups WHERE entry_pass = :pass"),
+        {"pass": clean_pass},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Invalid entry pass. No gym group found.")
+
+    group_id = row.id
+    try:
+        db.execute(
+            text("""
+                INSERT INTO gym_group_members (group_id, user_id, user_name)
+                VALUES (:gid, :uid, :uname)
+                ON CONFLICT (group_id, user_id) DO UPDATE SET user_name = EXCLUDED.user_name
+            """),
+            {"gid": group_id, "uid": req.user_id, "uname": req.user_name.strip()},
+        )
+        db.commit()
+        return {"status": "success", "group": _build_group_payload(db, group_id)}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to join group: {str(e)}")
+
+@app.get("/api/groups/my/{user_id}")
+def get_my_gym_group(user_id: int, db: Session = Depends(get_db)):
+    row = db.execute(
+        text("""
+            SELECT group_id FROM gym_group_members
+            WHERE user_id = :uid
+            ORDER BY joined_at DESC
+            LIMIT 1
+        """),
+        {"uid": user_id},
+    ).fetchone()
+
+    if not row:
+        return {"status": "success", "group": None}
+
+    return {"status": "success", "group": _build_group_payload(db, row.group_id)}
+
+@app.put("/api/groups/{group_id}/reminder")
+def update_group_gym_reminder(group_id: int, req: GroupReminderUpdate, db: Session = Depends(get_db)):
+    now_ist = get_ist_now()
+    try:
+        res = db.execute(
+            text("""
+                UPDATE gym_groups
+                SET gym_reminder_hour = :h,
+                    gym_reminder_minute = :m,
+                    reminder_updated_by = :uname,
+                    reminder_updated_at = :ts
+                WHERE id = :gid
+                RETURNING id
+            """),
+            {
+                "h": req.hour,
+                "m": req.minute,
+                "uname": req.user_name.strip(),
+                "ts": now_ist,
+                "gid": group_id,
+            },
+        ).fetchone()
+        if not res:
+            raise HTTPException(status_code=404, detail="Gym group not found.")
+        db.commit()
+        return {"status": "success", "group": _build_group_payload(db, group_id)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update group reminder: {str(e)}")
+
+@app.post("/api/groups/{group_id}/leave/{user_id}")
+def leave_gym_group(group_id: int, user_id: int, db: Session = Depends(get_db)):
+    db.execute(
+        text("DELETE FROM gym_group_members WHERE group_id = :gid AND user_id = :uid"),
+        {"gid": group_id, "uid": user_id},
+    )
+    db.commit()
+    return {"status": "success", "message": "Left gym group."}
+
+def _build_group_payload(db: Session, group_id: int) -> dict:
+    g = db.execute(
+        text("SELECT * FROM gym_groups WHERE id = :gid"),
+        {"gid": group_id},
+    ).fetchone()
+    members = db.execute(
+        text("SELECT user_id, user_name FROM gym_group_members WHERE group_id = :gid ORDER BY joined_at ASC"),
+        {"gid": group_id},
+    ).fetchall()
+    return {
+        "id": g.id,
+        "group_name": g.group_name,
+        "entry_pass": g.entry_pass,
+        "created_by": g.created_by,
+        "gym_reminder_hour": g.gym_reminder_hour,
+        "gym_reminder_minute": g.gym_reminder_minute,
+        "reminder_updated_by": g.reminder_updated_by or "",
+        "reminder_updated_at": g.reminder_updated_at.isoformat() if g.reminder_updated_at else "",
+        "members": [{"user_id": m.user_id, "user_name": m.user_name} for m in members],
+    }
 
 if __name__ == "__main__":
     import uvicorn

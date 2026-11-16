@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/notification_service.dart';
 
 class SetLog {
   int setNumber;
@@ -22,44 +23,55 @@ class SetLog {
 class DailyTrackerState extends ChangeNotifier {
   final String backendUrl = "https://backend-um5a.onrender.com";
 
-// Auto-save daily competed ecercises.
-
   String lastLoggedDate = "";
 
-Future<void> checkAndRotateDailyLog() async {
-  final prefs = await SharedPreferences.getInstance();
-  final todayStr = DateTime.now().toIso8601String().split('T')[0];
-  lastLoggedDate = prefs.getString('lastLoggedDate') ?? todayStr;
+  String get todayDateStr {
+    final now = DateTime.now();
+    return "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+  }
 
-  if (lastLoggedDate != todayStr) {
-    // Archive yesterday's completed workouts into weekly progress before clearing
-    final dayOfWeek = _getDayOfWeekName(DateTime.now().subtract(const Duration(days: 1)).weekday);
-    if (!weeklyUserDietLog.containsKey(dayOfWeek)) {
-      weeklyUserDietLog[dayOfWeek] = [];
+  String get todayDayName => _getDayOfWeekName(DateTime.now().weekday);
+
+  Future<void> checkAndRotateDailyLog() async {
+    final prefs = await SharedPreferences.getInstance();
+    final todayStr = todayDateStr;
+    lastLoggedDate = prefs.getString('lastLoggedDate') ?? "";
+
+    if (lastLoggedDate != todayStr) {
+      todayLog.clear();
+      workoutLog.clear();
+      waterGlasses = 0;
+      totalCaloriesBurned = 0;
+
+      await prefs.setString('lastLoggedDate', todayStr);
+      await prefs.setInt('waterGlasses_$todayStr', 0);
+      lastLoggedDate = todayStr;
+      notifyListeners();
+    } else {
+      waterGlasses = prefs.getInt('waterGlasses_$todayStr') ?? waterGlasses;
     }
-
-    // Reset today's direct logs for the new day
-    todayLog.clear();
-    workoutLog.clear();
-
-    await prefs.setString('lastLoggedDate', todayStr);
-    lastLoggedDate = todayStr;
-    notifyListeners();
   }
-}
 
-String _getDayOfWeekName(int weekday) {
-  switch (weekday) {
-    case 1: return 'Monday';
-    case 2: return 'Tuesday';
-    case 3: return 'Wednesday';
-    case 4: return 'Thursday';
-    case 5: return 'Friday';
-    case 6: return 'Saturday';
-    case 7: return 'Sunday';
-    default: return 'Monday';
+  String _getDayOfWeekName(int weekday) {
+    switch (weekday) {
+      case 1:
+        return 'Monday';
+      case 2:
+        return 'Tuesday';
+      case 3:
+        return 'Wednesday';
+      case 4:
+        return 'Thursday';
+      case 5:
+        return 'Friday';
+      case 6:
+        return 'Saturday';
+      case 7:
+        return 'Sunday';
+      default:
+        return 'Monday';
+    }
   }
-}
 
   // --- Auth & Session State ---
   bool isLoggedIn = false;
@@ -81,22 +93,23 @@ String _getDayOfWeekName(int weekday) {
   double distanceKm = 0.0;
   int totalCaloriesBurned = 0;
 
-  // --- Water Intake Tracker ---
+  // --- Water Intake Tracker (Today + Weekly) ---
   int waterGlasses = 0;
   final int waterGoalGlasses = 12;
+  List<Map<String, dynamic>> weeklyWaterData = [];
+
+  // --- Gym Buddy Group State ---
+  Map<String, dynamic>? activeGymGroup;
 
   // --- Today's Direct Log ---
   List<Map<String, dynamic>> todayLog = [];
   List<Map<String, dynamic>> workoutLog = [];
 
-  // --- Notifications Plugin ---
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  // --- Personal Best PR Records ---
   Map<String, Map<String, double>> personalRecords = {};
 
-  // --- USER-ENTERED WEEKLY DIET LOG (Mon-Sun) ---
   Map<String, List<Map<String, dynamic>>> weeklyUserDietLog = {
     'Monday': [],
     'Tuesday': [],
@@ -107,7 +120,6 @@ String _getDayOfWeekName(int weekday) {
     'Sunday': [],
   };
 
-  // --- RESTORED: Weekly Progress Data Getter ---
   List<Map<String, dynamic>> get weeklyProgressData {
     List<String> days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     List<String> fullDays = [
@@ -120,20 +132,16 @@ String _getDayOfWeekName(int weekday) {
       'Sunday'
     ];
 
-    final now = DateTime.now();
-    final todayWeekday = now.weekday; // 1 = Monday, 7 = Sunday
+    final todayWeekday = DateTime.now().weekday;
 
     return List.generate(7, (index) {
       String fullDay = fullDays[index];
-      List<Map<String, dynamic>> dayMeals = weeklyUserDietLog[fullDay] ?? [];
-
-      int dayCalories =
-          dayMeals.fold(0, (sum, meal) => sum + ((meal['calories'] ?? 0) as int));
-
-      // Check if this day is today
       bool isToday = (index + 1) == todayWeekday;
+      List<Map<String, dynamic>> dayMeals =
+          isToday ? todayLog : (weeklyUserDietLog[fullDay] ?? []);
 
-      // Only show real data - no fake/placeholder data
+      int dayCalories = dayMeals.fold(
+          0, (sum, meal) => sum + ((meal['calories'] ?? 0) as int));
       int burnedCalories = isToday ? totalCaloriesBurned : 0;
 
       return {
@@ -156,22 +164,119 @@ String _getDayOfWeekName(int weekday) {
 
   DailyTrackerState() {
     _initNotifications();
+    _buildLocalWeeklyWaterFallback();
     checkSavedSession();
   }
 
-  void refreshUI() {
-    notifyListeners();
+  void refreshUI() => notifyListeners();
+
+  // --- WATER INTAKE + WEEKLY SYNC ---
+  void _buildLocalWeeklyWaterFallback() {
+    final now = DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final todayStr = todayDateStr;
+
+    weeklyWaterData = List.generate(7, (i) {
+      final d = monday.add(Duration(days: i));
+      final dStr =
+          "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
+      return {
+        'date': dStr,
+        'day': labels[i],
+        'is_today': dStr == todayStr,
+        'glasses': dStr == todayStr ? waterGlasses : 0,
+        'ml_total': (dStr == todayStr ? waterGlasses : 0) * 250,
+      };
+    });
   }
 
-  void addWaterGlass() {
+  Future<void> addWaterGlass() async {
+    await checkAndRotateDailyLog();
     waterGlasses++;
-    notifyListeners();
+    await _persistAndSyncWater();
   }
 
-  void removeWaterGlass() {
+  Future<void> removeWaterGlass() async {
+    await checkAndRotateDailyLog();
     if (waterGlasses > 0) {
       waterGlasses--;
+      await _persistAndSyncWater();
+    }
+  }
+
+  Future<void> _persistAndSyncWater() async {
+    final prefs = await SharedPreferences.getInstance();
+    final todayStr = todayDateStr;
+    await prefs.setInt('waterGlasses_$todayStr', waterGlasses);
+
+    for (var dayEntry in weeklyWaterData) {
+      if (dayEntry['date'] == todayStr) {
+        dayEntry['glasses'] = waterGlasses;
+        dayEntry['ml_total'] = waterGlasses * 250;
+      }
+    }
+    notifyListeners();
+
+    if (userId > 0) {
+      try {
+        await http
+            .post(
+              Uri.parse('$backendUrl/api/water'),
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({
+                'user_id': userId,
+                'glasses': waterGlasses,
+                'ml_total': waterGlasses * 250,
+                'log_date': todayStr,
+              }),
+            )
+            .timeout(const Duration(seconds: 30));
+      } catch (e) {
+        debugPrint("Water sync error: $e");
+      }
+    }
+  }
+
+  Future<void> fetchWeeklyWater() async {
+    final prefs = await SharedPreferences.getInstance();
+    final todayStr = todayDateStr;
+    waterGlasses = prefs.getInt('waterGlasses_$todayStr') ?? waterGlasses;
+    _buildLocalWeeklyWaterFallback();
+
+    if (userId <= 0) {
       notifyListeners();
+      return;
+    }
+
+    try {
+      final res = await http
+          .get(Uri.parse('$backendUrl/api/water/weekly/$userId'))
+          .timeout(const Duration(seconds: 45));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final List list = data['weekly'] ?? [];
+        if (list.isNotEmpty) {
+          weeklyWaterData = list.map<Map<String, dynamic>>((item) {
+            if (item['date'] == todayStr) {
+              final remoteGlasses = (item['glasses'] ?? 0) as int;
+              if (remoteGlasses > waterGlasses) {
+                waterGlasses = remoteGlasses;
+                prefs.setInt('waterGlasses_$todayStr', waterGlasses);
+              }
+              return {
+                ...Map<String, dynamic>.from(item),
+                'glasses': waterGlasses,
+                'ml_total': waterGlasses * 250,
+              };
+            }
+            return Map<String, dynamic>.from(item);
+          }).toList();
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Weekly water fetch error: $e");
     }
   }
 
@@ -180,7 +285,6 @@ String _getDayOfWeekName(int weekday) {
     notifyListeners();
   }
 
-  // --- RESTORED: Health Sensors Sync Method ---
   void syncDeviceHealthData({
     required int steps,
     required double distance,
@@ -195,6 +299,7 @@ String _getDayOfWeekName(int weekday) {
 
   // --- SESSION MANAGEMENT ---
   Future<void> checkSavedSession() async {
+    await checkAndRotateDailyLog();
     final prefs = await SharedPreferences.getInstance();
     isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
     userId = prefs.getInt('userId') ?? prefs.getInt('user_id') ?? 0;
@@ -204,11 +309,13 @@ String _getDayOfWeekName(int weekday) {
     heightCm = prefs.getDouble('heightCm') ?? heightCm;
     weightKg = prefs.getDouble('weightKg') ?? weightKg;
 
-    debugPrint("Session checked: isLoggedIn=$isLoggedIn, userId=$userId");
-
     if (userId > 0) {
-      await fetchBackendMeals();
-      await fetchBackendWorkouts();
+      await Future.wait([
+        fetchBackendMeals(),
+        fetchBackendWorkouts(),
+        fetchWeeklyWater(),
+        fetchMyGymGroup(),
+      ]);
     }
     notifyListeners();
   }
@@ -239,9 +346,7 @@ String _getDayOfWeekName(int weekday) {
     if (height > 0) heightCm = height;
     if (weight > 0) weightKg = weight;
 
-    await fetchBackendMeals();
-    await fetchBackendWorkouts();
-    notifyListeners();
+    await checkSavedSession();
   }
 
   Future<void> _initNotifications() async {
@@ -258,75 +363,69 @@ String _getDayOfWeekName(int weekday) {
     notifyListeners();
   }
 
-// --- MEAL LOGGING & DATABASE SYNC ---
-Future<void> logUserMeal({
-  required String day,
-  required String mealCategory,
-  required String foodName,
-  required int calories,
-  required int protein,
-  required int carbs,
-  required int fat,
-}) async {
-  debugPrint("🍽️ logUserMeal called - Day: $day, Food: $foodName, User ID: $userId");
-  
-  final mealEntry = {
-    'category': mealCategory,
-    'name': foodName,
-    'calories': calories,
-    'protein': protein,
-    'carbs': carbs,
-    'fat': fat,
-  };
+  // --- MEAL LOGGING & DATE-FILTERED SYNC ---
+  Future<void> logUserMeal({
+    required String day,
+    required String mealCategory,
+    required String foodName,
+    required int calories,
+    required int protein,
+    required int carbs,
+    required int fat,
+  }) async {
+    await checkAndRotateDailyLog();
+    final mealEntry = {
+      'category': mealCategory,
+      'name': foodName,
+      'calories': calories,
+      'protein': protein,
+      'carbs': carbs,
+      'fat': fat,
+    };
 
-  if (weeklyUserDietLog.containsKey(day)) {
-    weeklyUserDietLog[day]!.add(mealEntry);
-  }
-
-  debugPrint("📊 Attempting to sync to backend. userId=$userId");
-  
-  if (userId > 0) {
-  try {
-    debugPrint("📤 Sending meal to backend...");
-    
-    final res = await http
-        .post(
-          Uri.parse('$backendUrl/api/meals'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'user_id': userId,
-            'name': "$mealCategory - $foodName",
-            'quantity': '1 portion',
-            'calories': calories,
-            'protein': protein.toDouble(),
-            'carbs': carbs.toDouble(),
-            'fat': fat.toDouble(),
-          }),
-        )
-        .timeout(const Duration(seconds: 60));
-    
-    debugPrint("📥 Response: ${res.statusCode}");
-    
-    if (res.statusCode == 200 || res.statusCode == 201) {
-      debugPrint("✅ Meal logged successfully!");
-      await fetchBackendMeals();
-    } else {
-      debugPrint("⚠️ Failed with status: ${res.statusCode}, Body: ${res.body}");
+    if (weeklyUserDietLog.containsKey(day)) {
+      weeklyUserDietLog[day]!.add(mealEntry);
     }
-  } on TimeoutException catch (e) {
-    debugPrint("⏱️ Meal logging timeout: $e");
-    debugPrint("💡 Server may be sleeping. Try again in a moment.");
-  } catch (e) {
-    debugPrint("❌ Error syncing meal to database: $e");
-  }
-  }}
 
-  // --- WORKOUT LOGGING & DATABASE SYNC ---
+    if (userId > 0) {
+      try {
+        final res = await http
+            .post(
+              Uri.parse('$backendUrl/api/meals'),
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({
+                'user_id': userId,
+                'name': "$mealCategory - $foodName",
+                'quantity': '1 portion',
+                'calories': calories,
+                'protein': protein.toDouble(),
+                'carbs': carbs.toDouble(),
+                'fat': fat.toDouble(),
+                'log_date': todayDateStr,
+              }),
+            )
+            .timeout(const Duration(seconds: 60));
+
+        if (res.statusCode == 200 || res.statusCode == 201) {
+          await fetchBackendMeals();
+        }
+      } catch (e) {
+        debugPrint("❌ Error syncing meal: $e");
+      }
+    } else {
+      todayLog.add(mealEntry);
+      notifyListeners();
+    }
+  }
+
+  // --- WORKOUT LOGGING + GYM BUDDY CO-LOGGING ---
   Future<void> logExerciseWithSets({
     required String muscle,
     required String exerciseName,
     required List<SetLog> sets,
+    List<int> buddyUserIds = const [],
   }) async {
+    await checkAndRotateDailyLog();
     double maxWeight = 0;
     for (var s in sets) {
       if (s.weight > maxWeight) maxWeight = s.weight;
@@ -338,23 +437,28 @@ Future<void> logUserMeal({
 
     if (userId > 0) {
       try {
-        final res = await http.post(
-          Uri.parse('$backendUrl/api/workouts'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'user_id': userId,
-            'workout_type': 'Strength',
-            'muscle': muscle,
-            'exercise': exerciseName,
-            'sets_count': sets.length,
-            'max_weight': maxWeight,
-          }),
-        );
+        final res = await http
+            .post(
+              Uri.parse('$backendUrl/api/workouts'),
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({
+                'user_id': userId,
+                'workout_type': 'Strength',
+                'muscle': muscle,
+                'exercise': exerciseName,
+                'sets_count': sets.length,
+                'max_weight': maxWeight,
+                'log_date': todayDateStr,
+                'buddy_user_ids': buddyUserIds,
+                'logged_by_name': fullName,
+              }),
+            )
+            .timeout(const Duration(seconds: 60));
         if (res.statusCode == 200 || res.statusCode == 201) {
           await fetchBackendWorkouts();
         }
       } catch (e) {
-        debugPrint("Error syncing workout to database: $e");
+        debugPrint("Error syncing workout: $e");
       }
     } else {
       workoutLog.add({
@@ -370,29 +474,34 @@ Future<void> logUserMeal({
 
   Future<void> logCardioSession(
       String type, int durationMins, double distance, int calories) async {
+    await checkAndRotateDailyLog();
     totalCaloriesBurned += calories;
     distanceKm += distance;
 
     if (userId > 0) {
       try {
-        final res = await http.post(
-          Uri.parse('$backendUrl/api/workouts'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'user_id': userId,
-            'workout_type': 'Cardio',
-            'muscle': 'Cardio',
-            'exercise': type,
-            'duration_mins': durationMins,
-            'speed_kmh': durationMins > 0 ? (distance / (durationMins / 60.0)) : 0.0,
-            'calories_burned': calories,
-          }),
-        );
+        final res = await http
+            .post(
+              Uri.parse('$backendUrl/api/workouts'),
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({
+                'user_id': userId,
+                'workout_type': 'Cardio',
+                'muscle': 'Cardio',
+                'exercise': type,
+                'duration_mins': durationMins,
+                'speed_kmh':
+                    durationMins > 0 ? (distance / (durationMins / 60.0)) : 0.0,
+                'calories_burned': calories,
+                'log_date': todayDateStr,
+              }),
+            )
+            .timeout(const Duration(seconds: 60));
         if (res.statusCode == 200 || res.statusCode == 201) {
           await fetchBackendWorkouts();
         }
       } catch (e) {
-        debugPrint("Error syncing cardio to database: $e");
+        debugPrint("Error syncing cardio: $e");
       }
     } else {
       workoutLog.add({
@@ -403,28 +512,23 @@ Future<void> logUserMeal({
         'caloriesBurned': calories,
         'durationMins': durationMins,
         'distance': distance,
-        'details': '$durationMins mins | ${distance.toStringAsFixed(2)} km | $calories kcal',
+        'details':
+            '$durationMins mins | ${distance.toStringAsFixed(2)} km | $calories kcal',
       });
       notifyListeners();
     }
   }
 
-  // --- FETCH MEALS FROM DATABASE ---
-Future<void> fetchBackendMeals() async {
-  if (userId <= 0) return;
-  
-  int retryCount = 0;
-  const maxRetries = 3;
-  const timeoutDuration = Duration(seconds: 60); // Increased from default 30s
-  
-  while (retryCount < maxRetries) {
+  // --- FETCH ONLY TODAY'S MEALS FROM DATABASE ---
+  Future<void> fetchBackendMeals() async {
+    if (userId <= 0) return;
+    await checkAndRotateDailyLog();
+
     try {
-      debugPrint("📡 Fetching meals from backend (attempt ${retryCount + 1}/$maxRetries)...");
-      
       final res = await http
-          .get(Uri.parse('$backendUrl/api/meals/$userId'))
-          .timeout(timeoutDuration);
-      
+          .get(Uri.parse('$backendUrl/api/meals/$userId?date=$todayDateStr'))
+          .timeout(const Duration(seconds: 60));
+
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final List meals = data['meals'] ?? [];
@@ -441,54 +545,24 @@ Future<void> fetchBackendMeals() async {
           };
         }).toList();
 
-        debugPrint("✅ Fetched ${meals.length} meals successfully");
+        weeklyUserDietLog[todayDayName] = List<Map<String, dynamic>>.from(todayLog);
         notifyListeners();
-        return; // Success - exit the retry loop
-      } else {
-        debugPrint("⚠️ Server returned status ${res.statusCode}");
-        throw Exception("Server error: ${res.statusCode}");
-      }
-    } on TimeoutException catch (e) {
-      retryCount++;
-      debugPrint("⏱️ Request timeout (attempt $retryCount/$maxRetries): $e");
-      
-      if (retryCount >= maxRetries) {
-        debugPrint("❌ Max retries reached. Server might be sleeping on Render.");
-        debugPrint("💡 Tip: Render free tier sleeps after 15min inactivity. First request takes 30-60s to wake up.");
-      } else {
-        // Wait before retrying (exponential backoff)
-        await Future.delayed(Duration(seconds: retryCount * 5));
       }
     } catch (e) {
-      retryCount++;
-      debugPrint("❌ Error fetching backend meals (attempt $retryCount/$maxRetries): $e");
-      
-      if (retryCount >= maxRetries) {
-        debugPrint("❌ Failed to fetch meals after $maxRetries attempts");
-        break;
-      } else {
-        await Future.delayed(Duration(seconds: retryCount * 3));
-      }
+      debugPrint("❌ Error fetching today's meals: $e");
     }
   }
-}
 
-  // --- FETCH WORKOUTS FROM DATABASE ---
-Future<void> fetchBackendWorkouts() async {
-  if (userId <= 0) return;
-  
-  int retryCount = 0;
-  const maxRetries = 3;
-  const timeoutDuration = Duration(seconds: 60);
-  
-  while (retryCount < maxRetries) {
+  // --- FETCH ONLY TODAY'S WORKOUTS FROM DATABASE ---
+  Future<void> fetchBackendWorkouts() async {
+    if (userId <= 0) return;
+    await checkAndRotateDailyLog();
+
     try {
-      debugPrint("📡 Fetching workouts from backend (attempt ${retryCount + 1}/$maxRetries)...");
-      
       final res = await http
-          .get(Uri.parse('$backendUrl/api/workouts/$userId'))
-          .timeout(timeoutDuration);
-      
+          .get(Uri.parse('$backendUrl/api/workouts/$userId?date=$todayDateStr'))
+          .timeout(const Duration(seconds: 60));
+
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final List workouts = data['workouts'] ?? [];
@@ -502,62 +576,190 @@ Future<void> fetchBackendWorkouts() async {
           int durationMins = w['duration_mins'] ?? 0;
           double speedKmh = (w['speed_kmh'] ?? 0.0).toDouble();
           int caloriesBurned = w['calories_burned'] ?? 100;
+          String loggedBy = (w['logged_by'] ?? '').toString();
 
           List<SetLog> reconstructedSets = List.generate(
             count,
             (i) => SetLog(setNumber: i + 1, reps: 10, weight: weight),
           );
 
-          // Calculate distance for cardio
-          double distance = isCardio && durationMins > 0 ? (speedKmh * (durationMins / 60.0)) : 0.0;
+          double distance = isCardio && durationMins > 0
+              ? (speedKmh * (durationMins / 60.0))
+              : 0.0;
 
           return {
             'id': w['id'],
             'muscle': w['muscle'] ?? 'General',
-            'exercise': w['exercise'] ?? 'Exercise',
+            'exercise': loggedBy.isNotEmpty
+                ? "${w['exercise']} (with $loggedBy)"
+                : (w['exercise'] ?? 'Exercise'),
             'sets': reconstructedSets,
             'maxWeight': weight,
             'caloriesBurned': caloriesBurned,
             'durationMins': durationMins,
             'distance': distance,
+            'loggedBy': loggedBy,
             'details': isCardio
                 ? '$durationMins mins | ${distance.toStringAsFixed(2)} km | $caloriesBurned kcal'
                 : null,
           };
         }).toList();
 
-        // Calculate total calories burned from fetched workouts
-        totalCaloriesBurned = workoutLog.fold(0, (sum, workout) => sum + ((workout['caloriesBurned'] ?? 0) as int));
+        totalCaloriesBurned = workoutLog.fold(
+            0, (sum, workout) => sum + ((workout['caloriesBurned'] ?? 0) as int));
 
-        debugPrint("✅ Fetched ${workouts.length} workouts successfully");
-        debugPrint("📊 Total calories burned today: $totalCaloriesBurned kcal");
         notifyListeners();
-        return; // Success - exit the retry loop
-      }
-    } on TimeoutException catch (e) {
-      retryCount++;
-      debugPrint("⏱️ Workout fetch timeout (attempt $retryCount/$maxRetries): $e");
-      
-      if (retryCount < maxRetries) {
-        await Future.delayed(Duration(seconds: retryCount * 5));
       }
     } catch (e) {
-      retryCount++;
-      debugPrint("❌ Error fetching backend workouts (attempt $retryCount/$maxRetries): $e");
-      
-      if (retryCount < maxRetries) {
-        await Future.delayed(Duration(seconds: retryCount * 3));
-      } else {
-        break;
+      debugPrint("❌ Error fetching today's workouts: $e");
+    }
+  }
+
+  // --- GYM BUDDY GROUP METHODS ---
+  Future<void> fetchMyGymGroup() async {
+    if (userId <= 0) return;
+    try {
+      final res = await http
+          .get(Uri.parse('$backendUrl/api/groups/my/$userId'))
+          .timeout(const Duration(seconds: 45));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        activeGymGroup = data['group'];
+        await _syncGroupReminderIfNewer();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error fetching gym group: $e");
+    }
+  }
+
+  Future<void> createGymGroup(String groupName, String entryPass) async {
+    if (userId <= 0) throw Exception("Please log in first.");
+    final res = await http
+        .post(
+          Uri.parse('$backendUrl/api/groups/create'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'user_id': userId,
+            'user_name': fullName,
+            'group_name': groupName,
+            'entry_pass': entryPass,
+          }),
+        )
+        .timeout(const Duration(seconds: 45));
+
+    final data = json.decode(res.body);
+    if (res.statusCode == 200) {
+      activeGymGroup = data['group'];
+      await _syncGroupReminderIfNewer();
+      notifyListeners();
+    } else {
+      throw Exception(data['detail'] ?? "Failed to create group");
+    }
+  }
+
+  Future<void> joinGymGroup(String entryPass) async {
+    if (userId <= 0) throw Exception("Please log in first.");
+    final res = await http
+        .post(
+          Uri.parse('$backendUrl/api/groups/join'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'user_id': userId,
+            'user_name': fullName,
+            'entry_pass': entryPass,
+          }),
+        )
+        .timeout(const Duration(seconds: 45));
+
+    final data = json.decode(res.body);
+    if (res.statusCode == 200) {
+      activeGymGroup = data['group'];
+      await _syncGroupReminderIfNewer();
+      notifyListeners();
+    } else {
+      throw Exception(data['detail'] ?? "Invalid entry pass");
+    }
+  }
+
+  Future<void> updateGroupGymReminder(int hour, int minute) async {
+    if (activeGymGroup == null) return;
+    final groupId = activeGymGroup!['id'];
+    final res = await http
+        .put(
+          Uri.parse('$backendUrl/api/groups/$groupId/reminder'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'user_id': userId,
+            'user_name': fullName,
+            'hour': hour,
+            'minute': minute,
+          }),
+        )
+        .timeout(const Duration(seconds: 45));
+
+    final data = json.decode(res.body);
+    if (res.statusCode == 200) {
+      activeGymGroup = data['group'];
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('last_group_reminder_ts',
+          activeGymGroup!['reminder_updated_at'] ?? '');
+      await NotificationService().scheduleGymReminder(
+        hour: hour,
+        minute: minute,
+        updatedByBuddy: fullName,
+      );
+      notifyListeners();
+    } else {
+      throw Exception(data['detail'] ?? "Failed to update group reminder");
+    }
+  }
+
+  Future<void> leaveGymGroup() async {
+    if (activeGymGroup == null) return;
+    final groupId = activeGymGroup!['id'];
+    await http
+        .post(Uri.parse('$backendUrl/api/groups/$groupId/leave/$userId'))
+        .timeout(const Duration(seconds: 30));
+    activeGymGroup = null;
+    notifyListeners();
+  }
+
+  Future<void> _syncGroupReminderIfNewer() async {
+    if (activeGymGroup == null) return;
+    final h = activeGymGroup!['gym_reminder_hour'];
+    final m = activeGymGroup!['gym_reminder_minute'];
+    final updatedAt = (activeGymGroup!['reminder_updated_at'] ?? '').toString();
+    final updatedBy = (activeGymGroup!['reminder_updated_by'] ?? '').toString();
+
+    if (h != null && m != null && updatedAt.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      final lastSyncedTs = prefs.getString('last_group_reminder_ts') ?? '';
+      if (lastSyncedTs != updatedAt) {
+        await prefs.setString('last_group_reminder_ts', updatedAt);
+        await NotificationService().scheduleGymReminder(
+          hour: h as int,
+          minute: m as int,
+          updatedByBuddy: updatedBy,
+        );
       }
     }
   }
-}
 
-  // --- DELETE MEAL BUTTON ACTION ---
+  List<Map<String, dynamic>> get gymBuddiesExcludingMe {
+    if (activeGymGroup == null) return [];
+    final List members = activeGymGroup!['members'] ?? [];
+    return members
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((m) => m['user_id'] != userId)
+        .toList();
+  }
+
+  // --- DELETE MEAL / WORKOUT / ACCOUNT ---
   Future<void> deleteMeal(int mealId) async {
     try {
-      final res = await http.delete(Uri.parse('$backendUrl/api/meals/$mealId'));
+      final res =
+          await http.delete(Uri.parse('$backendUrl/api/meals/$mealId'));
       if (res.statusCode == 200) {
         await fetchBackendMeals();
       }
@@ -566,10 +768,10 @@ Future<void> fetchBackendWorkouts() async {
     }
   }
 
-  // --- DELETE WORKOUT BUTTON ACTION ---
   Future<void> deleteWorkout(int workoutId) async {
     try {
-      final res = await http.delete(Uri.parse('$backendUrl/api/workouts/$workoutId'));
+      final res =
+          await http.delete(Uri.parse('$backendUrl/api/workouts/$workoutId'));
       if (res.statusCode == 200) {
         await fetchBackendWorkouts();
       }
@@ -581,65 +783,43 @@ Future<void> fetchBackendWorkouts() async {
   Future<void> logoutUser() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-
     isLoggedIn = false;
     userId = 0;
     todayLog.clear();
     workoutLog.clear();
     weeklyUserDietLog.forEach((key, value) => value.clear());
     waterGlasses = 0;
+    activeGymGroup = null;
     notifyListeners();
   }
 
-  // --- DELETE USER ACCOUNT ---
   Future<void> deleteUserAccount(String password) async {
-    if (userId <= 0) {
-      throw Exception("No user logged in");
-    }
+    if (userId <= 0) throw Exception("No user logged in");
+    final res = await http
+        .delete(
+          Uri.parse('$backendUrl/api/user/delete'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({'user_id': userId, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 30));
 
-    try {
-      debugPrint("🗑️ Attempting to delete account for user_id: $userId");
-
-      final res = await http.delete(
-        Uri.parse('$backendUrl/api/user/delete'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'user_id': userId,
-          'password': password,
-        }),
-      ).timeout(const Duration(seconds: 30));
-
-      if (res.statusCode == 200) {
-        debugPrint("✅ Account deleted successfully");
-
-        // Clear all local data
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.clear();
-
-        isLoggedIn = false;
-        userId = 0;
-        fullName = "";
-        email = "";
-        todayLog.clear();
-        workoutLog.clear();
-        weeklyUserDietLog.forEach((key, value) => value.clear());
-        waterGlasses = 0;
-        totalCaloriesBurned = 0;
-        notifyListeners();
-      } else if (res.statusCode == 401) {
-        throw Exception("Incorrect password. Please try again.");
-      } else if (res.statusCode == 404) {
-        throw Exception("User account not found");
-      } else {
-        final errorData = json.decode(res.body);
-        throw Exception(errorData['detail'] ?? "Failed to delete account");
-      }
-    } on TimeoutException {
-      throw Exception("Request timeout. Please check your connection.");
-    } catch (e) {
-      debugPrint("❌ Delete account error: $e");
-      if (e is Exception) rethrow;
-      throw Exception("Failed to delete account: $e");
+    if (res.statusCode == 200) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      isLoggedIn = false;
+      userId = 0;
+      todayLog.clear();
+      workoutLog.clear();
+      weeklyUserDietLog.forEach((key, value) => value.clear());
+      waterGlasses = 0;
+      totalCaloriesBurned = 0;
+      activeGymGroup = null;
+      notifyListeners();
+    } else if (res.statusCode == 401) {
+      throw Exception("Incorrect password. Please try again.");
+    } else {
+      final errorData = json.decode(res.body);
+      throw Exception(errorData['detail'] ?? "Failed to delete account");
     }
   }
 }

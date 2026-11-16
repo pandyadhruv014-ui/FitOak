@@ -1,6 +1,7 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -8,6 +9,10 @@ class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
+
+  static const String _prefGymHour = 'saved_gym_reminder_hour';
+  static const String _prefGymMinute = 'saved_gym_reminder_minute';
+  static const String _prefGymEnabled = 'saved_gym_reminder_enabled';
 
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
@@ -17,25 +22,18 @@ class NotificationService {
   Future<void> init() async {
     if (_isInitialized) return;
 
-    // 1. Initialize timezone database & bind device's real local timezone (e.g., Asia/Kolkata)
     tz.initializeTimeZones();
     try {
       final String timeZoneName = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(timeZoneName));
-      debugPrint('🕒 Local timezone configured: $timeZoneName');
     } catch (e) {
-      // Fallback to IST if device timezone lookup fails
       tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
-      debugPrint('⚠️ Fallback timezone set to Asia/Kolkata: $e');
     }
 
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidSettings);
-
     await _notificationsPlugin.initialize(initSettings);
 
-    // 2. Request Android 13+ notification & Android 12+ exact alarm permissions
     final androidImplementation =
         _notificationsPlugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
@@ -48,44 +46,40 @@ class NotificationService {
     _isInitialized = true;
   }
 
-  /// Immediate test notification to verify permissions & banner display
-  Future<void> sendInstantTestNotification() async {
-    await init();
-    await _notificationsPlugin.show(
-      999,
-      'FitOak Notifications Active ✅',
-      'Your scheduled gym & hydration reminders will appear right here.',
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'gym_reminders_v2',
-          'Gym Time Reminders',
-          channelDescription: 'Daily notifications for scheduled gym workouts',
-          importance: Importance.max,
-          priority: Priority.high,
-          playSound: true,
-          enableVibration: true,
-        ),
-      ),
-    );
+  /// Returns the user's saved gym reminder TimeOfDay (or null if never set)
+  Future<TimeOfDay?> getSavedGymReminder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool(_prefGymEnabled) ?? false;
+    final hour = prefs.getInt(_prefGymHour);
+    final minute = prefs.getInt(_prefGymMinute);
+    if (!enabled || hour == null || minute == null) return null;
+    return TimeOfDay(hour: hour, minute: minute);
   }
 
-  /// Schedules gym reminders for Monday-Saturday (excludes Sunday)
+  /// Schedules gym reminders for Mon-Sat and persists the exact hour/minute
   Future<void> scheduleGymReminder({
     required int hour,
     required int minute,
+    String? updatedByBuddy,
   }) async {
     await init();
 
-    // Cancel only existing gym reminder IDs (1..6), preserving hydration reminders
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefGymHour, hour);
+    await prefs.setInt(_prefGymMinute, minute);
+    await prefs.setBool(_prefGymEnabled, true);
+
     for (int weekday = 1; weekday <= 6; weekday++) {
       await _notificationsPlugin.cancel(weekday);
     }
 
     final now = tz.TZDateTime.now(tz.local);
+    final bodyText = (updatedByBuddy != null && updatedByBuddy.isNotEmpty)
+        ? 'FitOak Squad ($updatedByBuddy updated time): Push your limits today!'
+        : 'FitOak Reminder: Push your limits today!';
 
     for (int weekday = 1; weekday <= 6; weekday++) {
       var targetTime = _nextInstanceOfWeekday(weekday, hour, minute);
-
       if (!targetTime.isAfter(now)) {
         targetTime = targetTime.add(const Duration(days: 7));
       }
@@ -93,7 +87,7 @@ class NotificationService {
       await _notificationsPlugin.zonedSchedule(
         weekday,
         'Time to hit the gym! 🏋️',
-        'FitOak Reminder: Push your limits today!',
+        bodyText,
         targetTime,
         const NotificationDetails(
           android: AndroidNotificationDetails(
@@ -111,12 +105,12 @@ class NotificationService {
             UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
       );
-
-      debugPrint('📅 Scheduled Gym Reminder ID=$weekday for $targetTime (${tz.local.name})');
     }
+
+    debugPrint('📅 Persistent Gym Reminder locked at $hour:${minute.toString().padLeft(2, '0')}');
   }
 
-  /// Schedules hydration reminders for Monday-Saturday (excludes Sunday)
+  /// Schedules hydration reminders for Mon-Sat
   Future<void> scheduleHydrationReminder({
     required int hour,
     required int minute,
@@ -131,7 +125,6 @@ class NotificationService {
 
     for (int weekday = 1; weekday <= 6; weekday++) {
       var targetTime = _nextInstanceOfWeekday(weekday, hour, minute);
-
       if (!targetTime.isAfter(now)) {
         targetTime = targetTime.add(const Duration(days: 7));
       }
@@ -170,15 +163,23 @@ class NotificationService {
       hour,
       minute,
     );
-
     while (scheduledDate.weekday != weekday) {
       scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
-
     return scheduledDate;
   }
 
+  Future<void> cancelGymReminders() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefGymEnabled, false);
+    for (int weekday = 1; weekday <= 6; weekday++) {
+      await _notificationsPlugin.cancel(weekday);
+    }
+  }
+
   Future<void> cancelReminders() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefGymEnabled, false);
     await _notificationsPlugin.cancelAll();
   }
 }
