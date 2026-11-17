@@ -1108,3 +1108,17 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+
+@app.get("/api/debug/fcm/{user_id}")
+def debug_fcm_status(user_id: int):
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("SELECT fcm_token, updated_at FROM user_fcm_tokens WHERE user_id = :uid"),
+            {"uid": user_id},
+        ).fetchone()
+    return {
+        "firebase_initialized": bool(firebase_admin._apps),
+        "has_token": row is not None,
+        "token_preview": f"{row[0][:18]}..." if row else None,
+        "updated_at": str(row[1]) if row else None,
+    }

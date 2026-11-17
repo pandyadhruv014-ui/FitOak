@@ -13,11 +13,19 @@ const String baseUrl = "https://backend-um5a.onrender.com";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  await NotificationService().init();
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  await FcmService.instance.init();
-  await FcmService.instance.syncTokenWithBackend();
+
+  try {
+    await Firebase.initializeApp().timeout(const Duration(seconds: 8));
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    unawaited(
+      FcmService.instance.init().then((_) => FcmService.instance.syncTokenWithBackend()),
+    );
+  } catch (e) {
+    debugPrint("⚠️ Firebase init skipped or timed out: $e");
+  }
+
+  unawaited(NotificationService().init());
+
   runApp(const FitOakApp());
 }
 
@@ -64,6 +72,7 @@ class _FitOakAppState extends State<FitOakApp> with WidgetsBindingObserver {
       Permission.sensors,
       Permission.location,
     ].request();
+    await FcmService.instance.syncTokenWithBackend();
   }
 
   Future<void> _pingServerHealth() async {
