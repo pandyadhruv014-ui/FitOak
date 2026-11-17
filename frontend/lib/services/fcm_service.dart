@@ -105,7 +105,7 @@ class FcmService {
           )
           .timeout(const Duration(seconds: 30));
     } catch (e) {
-      debugPrint('FCM token sync failed: $e');
+      debugPrint('FCM token sync error: $e');
     }
   }
 }

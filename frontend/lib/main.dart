@@ -13,19 +13,14 @@ const String baseUrl = "https://backend-um5a.onrender.com";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   try {
-    await Firebase.initializeApp().timeout(const Duration(seconds: 8));
+    await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    unawaited(
-      FcmService.instance.init().then((_) => FcmService.instance.syncTokenWithBackend()),
-    );
-  } catch (e) {
-    debugPrint("⚠️ Firebase init skipped or timed out: $e");
+    unawaited(FcmService.instance.init());
+  } catch (e, stack) {
+    debugPrint('❌ Firebase.initializeApp() failed: $e\n$stack');
   }
-
   unawaited(NotificationService().init());
-
   runApp(const FitOakApp());
 }
 
@@ -55,25 +50,27 @@ class _FitOakAppState extends State<FitOakApp> with WidgetsBindingObserver {
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      dailyTracker.checkSavedSession();
+void didChangeAppLifecycleState(AppLifecycleState state) {
+  if (state == AppLifecycleState.resumed) {
+    dailyTracker.checkSavedSession().then((_) {
       FcmService.instance.syncTokenWithBackend();
-      _startKeepAlive(); // Immediately wake server when returning to app
-    } else if (state == AppLifecycleState.paused) {
-      _keepAliveTimer?.cancel();
-    }
+    });
+    _startKeepAlive();
+  } else if (state == AppLifecycleState.paused) {
+    _keepAliveTimer?.cancel();
   }
+}
 
-  Future<void> _requestAppPermissions() async {
-    await [
-      Permission.notification,
-      Permission.activityRecognition,
-      Permission.sensors,
-      Permission.location,
-    ].request();
-    await FcmService.instance.syncTokenWithBackend();
-  }
+Future<void> _requestAppPermissions() async {
+  await [
+    Permission.notification,
+    Permission.activityRecognition,
+    Permission.sensors,
+    Permission.location,
+  ].request();
+
+  await FcmService.instance.syncTokenWithBackend();
+}
 
   Future<void> _pingServerHealth() async {
     try {

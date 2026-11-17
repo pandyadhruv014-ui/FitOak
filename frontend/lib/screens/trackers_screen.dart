@@ -85,12 +85,15 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
   }
 
   Future<void> _pickAndSaveGymReminder() async {
+    final messenger = ScaffoldMessenger.of(context);
     final initial = _savedGymTime ?? const TimeOfDay(hour: 18, minute: 0);
     final picked = await showTimePicker(
       context: context,
       initialTime: initial,
     );
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
+
+    final formattedTime = picked.format(context);
 
     await NotificationService().scheduleGymReminder(
       hour: picked.hour,
@@ -100,27 +103,22 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
     if (dailyTracker.activeGymGroup != null) {
       try {
         await dailyTracker.updateGroupGymReminder(picked.hour, picked.minute);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  "Gym reminder set to ${picked.format(context)} for your entire Gym Squad!"),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+                "Gym reminder set to $formattedTime for your entire Gym Squad!"),
+            backgroundColor: Colors.green,
+          ),
+        );
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Saved locally, group sync failed: $e")),
-          );
-        }
+        messenger.showSnackBar(
+          SnackBar(content: Text("Saved locally, group sync failed: $e")),
+        );
       }
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    } else {
+      messenger.showSnackBar(
         SnackBar(
-          content: Text(
-              "Gym reminder locked at ${picked.format(context)} (Mon–Sat)."),
+          content: Text("Gym reminder locked at $formattedTime (Mon–Sat)."),
           backgroundColor: Colors.green,
         ),
       );
@@ -280,6 +278,8 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                     : () async {
                         final pass = passController.text.trim();
                         final gName = nameController.text.trim();
+                        final dialogNavigator = Navigator.of(ctx);
+                        final dialogMessenger = ScaffoldMessenger.of(ctx);
                         if (pass.isEmpty || (!isJoinMode && gName.isEmpty)) {
                           return;
                         }
@@ -290,16 +290,18 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                           } else {
                             await dailyTracker.createGymGroup(gName, pass);
                           }
-                          if (ctx.mounted) Navigator.pop(ctx);
-                        } catch (e) {
-                          setDialogState(() => isSubmitting = false);
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(
-                                  content: Text(e.toString()),
-                                  backgroundColor: Colors.red),
-                            );
+                          if (dialogNavigator.canPop()) {
+                            dialogNavigator.pop();
                           }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            setDialogState(() => isSubmitting = false);
+                          }
+                          dialogMessenger.showSnackBar(
+                            SnackBar(
+                                content: Text(e.toString()),
+                                backgroundColor: Colors.red),
+                          );
                         }
                       },
                 child: Text(isJoinMode ? "Join Squad" : "Create Squad",
@@ -320,6 +322,7 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
     final buddies = dailyTracker.gymBuddiesExcludingMe;
     final Set<int> selectedBuddyIds =
         buddies.map((b) => b['user_id'] as int).toSet();
+    final rootMessenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -435,16 +438,14 @@ class _TrackersTabScreenState extends State<TrackersTabScreen> {
                     buddyUserIds: selectedBuddyIds.toList(),
                   );
 
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(selectedBuddyIds.isEmpty
-                            ? "Logged $ex!"
-                            : "Logged $ex for you + ${selectedBuddyIds.length} gym buddy(s)!"),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
+                  rootMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text(selectedBuddyIds.isEmpty
+                          ? "Logged $ex!"
+                          : "Logged $ex for you + ${selectedBuddyIds.length} gym buddy(s)!"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
                 },
                 child: const Text("Save Workout",
                     style: TextStyle(color: Colors.white)),

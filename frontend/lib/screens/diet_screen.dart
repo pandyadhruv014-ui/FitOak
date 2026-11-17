@@ -47,6 +47,7 @@ class _DietScreenState extends State<DietScreen> {
     if (!mounted) return;
     setState(() => isLoading = true);
 
+    final messenger = ScaffoldMessenger.of(context);
     await dailyTracker.checkAndRotateDailyLog();
     final todayStr = dailyTracker.todayDateStr;
 
@@ -87,7 +88,7 @@ class _DietScreenState extends State<DietScreen> {
     } on TimeoutException catch (e) {
       debugPrint("Timeout loading meals: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text("Server is waking up... Please wait and try again."),
             backgroundColor: Colors.orange,
@@ -104,6 +105,7 @@ class _DietScreenState extends State<DietScreen> {
   void _showAddMealDialog() {
     final dishController = TextEditingController();
     final quantityController = TextEditingController();
+    final rootMessenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -217,15 +219,16 @@ class _DietScreenState extends State<DietScreen> {
                       : () async {
                           final dish = dishController.text.trim();
                           final quantity = quantityController.text.trim();
+                          final dialogMessenger =
+                              ScaffoldMessenger.of(stateContext);
+                          final dialogNavigator = Navigator.of(stateContext);
 
                           if (dish.isEmpty || quantity.isEmpty) {
-                            if (stateContext.mounted) {
-                              ScaffoldMessenger.of(stateContext).showSnackBar(
-                                const SnackBar(
-                                    content: Text(
-                                        "Please fill in dish name and quantity.")),
-                              );
-                            }
+                            dialogMessenger.showSnackBar(
+                              const SnackBar(
+                                  content: Text(
+                                      "Please fill in dish name and quantity.")),
+                            );
                             return;
                           }
 
@@ -238,18 +241,18 @@ class _DietScreenState extends State<DietScreen> {
                                 dailyTracker.userId;
 
                             if (userId <= 0) {
-                              setDialogState(() => isAnalyzing = false);
                               if (stateContext.mounted) {
-                                ScaffoldMessenger.of(stateContext).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        "User session expired. Please log in again."),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                                if (Navigator.canPop(stateContext)) {
-                                  Navigator.pop(stateContext);
-                                }
+                                setDialogState(() => isAnalyzing = false);
+                              }
+                              dialogMessenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      "User session expired. Please log in again."),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              if (dialogNavigator.canPop()) {
+                                dialogNavigator.pop();
                               }
                               return;
                             }
@@ -292,25 +295,23 @@ class _DietScreenState extends State<DietScreen> {
 
                               if (mealRes.statusCode == 200 ||
                                   mealRes.statusCode == 201) {
-                                if (stateContext.mounted &&
-                                    Navigator.canPop(stateContext)) {
-                                  Navigator.pop(stateContext);
+                                if (dialogNavigator.canPop()) {
+                                  dialogNavigator.pop();
                                 }
 
                                 await dailyTracker.fetchBackendMeals();
-                                if (mounted) {
-                                  await _fetchUserMeals();
+                                if (!mounted) return;
+                                await _fetchUserMeals();
 
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        "Logged ${aiData['meal_name']} (${aiData['calories']} kcal)!",
-                                      ),
-                                      backgroundColor: Colors.green,
-                                      duration: const Duration(seconds: 3),
+                                rootMessenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      "Logged ${aiData['meal_name']} (${aiData['calories']} kcal)!",
                                     ),
-                                  );
-                                }
+                                    backgroundColor: Colors.green,
+                                    duration: const Duration(seconds: 3),
+                                  ),
+                                );
                               } else {
                                 throw Exception(
                                     "Failed to save meal: ${mealRes.statusCode}");
@@ -320,15 +321,15 @@ class _DietScreenState extends State<DietScreen> {
                                   "FitOak-AI Analysis Failed: ${aiRes.statusCode}");
                             }
                           } catch (e) {
-                            setDialogState(() => isAnalyzing = false);
                             if (stateContext.mounted) {
-                              ScaffoldMessenger.of(stateContext).showSnackBar(
-                                SnackBar(
-                                  content: Text("Error: ${e.toString()}"),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
+                              setDialogState(() => isAnalyzing = false);
                             }
+                            dialogMessenger.showSnackBar(
+                              SnackBar(
+                                content: Text("Error: ${e.toString()}"),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
                           }
                         },
                   child: const Text("Analyze & Log",

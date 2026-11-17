@@ -62,8 +62,9 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
     final resetEmailController = TextEditingController(text: emailController.text.trim());
     final otpController = TextEditingController();
     final newPasswordController = TextEditingController();
-    int resetStep = 1; // Step 1: Email Request, Step 2: OTP Verification & Reset
+    int resetStep = 1;
     bool isSubmitting = false;
+    final rootMessenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -156,9 +157,12 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
                       ? null
                       : () async {
                           final targetEmail = resetEmailController.text.trim();
+                          final modalMessenger = ScaffoldMessenger.of(modalContext);
+                          final modalNavigator = Navigator.of(modalContext);
+
                           if (resetStep == 1) {
                             if (targetEmail.isEmpty) {
-                              ScaffoldMessenger.of(modalContext).showSnackBar(
+                              modalMessenger.showSnackBar(
                                 const SnackBar(content: Text("Please enter your registered email address.")),
                               );
                               return;
@@ -176,36 +180,36 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
                               final data = jsonDecode(res.body);
 
                               if (res.statusCode == 200) {
+                                modalMessenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(data['message'] ?? 'A 6-digit verification code has been sent to your email address.'),
+                                    backgroundColor: Colors.green,
+                                    duration: const Duration(seconds: 5),
+                                  ),
+                                );
                                 if (modalContext.mounted) {
-                                  ScaffoldMessenger.of(modalContext).showSnackBar(
-                                    SnackBar(
-                                      content: Text(data['message'] ?? 'A 6-digit verification code has been sent to your email address.'),
-                                      backgroundColor: Colors.green,
-                                      duration: const Duration(seconds: 5),
-                                    ),
-                                  );
+                                  setModalState(() {
+                                    resetStep = 2;
+                                    isSubmitting = false;
+                                  });
                                 }
-                                setModalState(() {
-                                  resetStep = 2;
-                                  isSubmitting = false;
-                                });
                               } else {
                                 throw Exception(data['detail'] ?? "Account email not found.");
                               }
                             } catch (e) {
-                              setModalState(() => isSubmitting = false);
                               if (modalContext.mounted) {
-                                ScaffoldMessenger.of(modalContext).showSnackBar(
-                                  SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
-                                );
+                                setModalState(() => isSubmitting = false);
                               }
+                              modalMessenger.showSnackBar(
+                                SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+                              );
                             }
                           } else {
                             final code = otpController.text.trim();
                             final newPass = newPasswordController.text.trim();
 
                             if (code.isEmpty || newPass.isEmpty) {
-                              ScaffoldMessenger.of(modalContext).showSnackBar(
+                              modalMessenger.showSnackBar(
                                 const SnackBar(content: Text("Please fill in OTP code and new password.")),
                               );
                               return;
@@ -227,16 +231,16 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
                               final data = jsonDecode(res.body);
 
                               if (res.statusCode == 200) {
-                                if (modalContext.mounted) {
-                                  Navigator.pop(modalContext);
+                                if (modalNavigator.canPop()) {
+                                  modalNavigator.pop();
                                 }
+                                rootMessenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text("Password updated successfully! Please log in."),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
                                 if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text("Password updated successfully! Please log in."),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
                                   setState(() {
                                     isLogin = true;
                                     emailController.text = targetEmail;
@@ -247,12 +251,12 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
                                 throw Exception(data['detail'] ?? "Invalid OTP or reset error.");
                               }
                             } catch (e) {
-                              setModalState(() => isSubmitting = false);
                               if (modalContext.mounted) {
-                                ScaffoldMessenger.of(modalContext).showSnackBar(
-                                  SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
-                                );
+                                setModalState(() => isSubmitting = false);
                               }
+                              modalMessenger.showSnackBar(
+                                SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+                              );
                             }
                           }
                         },
@@ -340,20 +344,15 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
             height: resolvedHeight,
             weight: resolvedWeight,
           );
-          debugPrint("✅ User session saved!");
-          debugPrint("📝 Stored userId: $resolvedId");
-          debugPrint("📝 Stored name: $resolvedName");
-          debugPrint("📝 Stored email: $resolvedEmail");
 
           final testPrefs = await SharedPreferences.getInstance();
           final savedUserId = testPrefs.getInt('userId');
-          debugPrint("🔍 Verification - userId from prefs: $savedUserId");
+          debugPrint("Verification - userId from prefs: $savedUserId");
         }
 
         if (!mounted) return;
 
         if (isLogin) {
-          // Register FCM device token for push notifications right after login
           await FcmService.instance.syncTokenWithBackend();
 
           if (!mounted) return;
