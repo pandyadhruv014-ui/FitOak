@@ -753,7 +753,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 12),
               const Text(
-                "Create a private squad with a secret entry pass or join your gym buddies' squad to:\n• Chat live with your Gym Squad buddies\n• Update the daily gym reminder for everyone in the squad\n• Log exercises once on the Strength Training page and automatically save them to selected buddies' logs",
+                "Create a private squad with a secret entry pass or join your gym buddies' squad to:\n• Chat live with your Gym Squad buddies (auto-clears after 7 days)\n• Update the daily gym reminder for everyone in the squad\n• Log exercises once on the Strength Training page and automatically save them to selected buddies' logs",
                 style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
               ),
               const SizedBox(height: 20),
@@ -781,6 +781,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final int? groupHour = group['gym_reminder_hour'];
     final int? groupMinute = group['gym_reminder_minute'];
     final String updatedBy = (group['reminder_updated_by'] ?? '').toString();
+    final bool isGroupCreator = group['created_by'] == dailyTracker.userId;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -862,7 +863,7 @@ class _HomeScreenState extends State<HomeScreen> {
             subtitle: Text(
               dailyTracker.squadMessages.isNotEmpty
                   ? "${dailyTracker.squadMessages.last['user_name']}: ${dailyTracker.squadMessages.last['message']}"
-                  : "Message your gym buddies about workout timing & split",
+                  : "Message your gym buddies (chats auto-delete after 7 days)",
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 12, color: Colors.grey),
@@ -984,18 +985,164 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 16),
 
-        Center(
-          child: TextButton.icon(
-            onPressed: () async {
-              await dailyTracker.leaveGymGroup();
-              setSubState(() {});
-            },
-            icon: const Icon(Icons.exit_to_app, color: Colors.redAccent),
-            label: const Text("Leave Gym Squad",
-                style: TextStyle(color: Colors.redAccent)),
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextButton.icon(
+              onPressed: () async {
+                await dailyTracker.leaveGymGroup();
+                setSubState(() {});
+              },
+              icon: const Icon(Icons.exit_to_app, color: Colors.orangeAccent),
+              label: const Text("Leave Gym Squad",
+                  style: TextStyle(color: Colors.orangeAccent)),
+            ),
+            if (isGroupCreator) ...[
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: () =>
+                    _showDeleteSquadDialog(context, group, setSubState),
+                icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+                label: const Text("Delete Group",
+                    style: TextStyle(
+                        color: Colors.redAccent, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ],
         ),
       ],
+    );
+  }
+
+  void _showDeleteSquadDialog(BuildContext parentContext,
+      Map<String, dynamic> group, StateSetter setSubState) {
+    final passController = TextEditingController();
+    bool isDeleting = false;
+    final groupId = group['id'];
+    final groupName = group['group_name'] ?? 'Gym Squad';
+
+    showDialog(
+      context: parentContext,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+                SizedBox(width: 8),
+                Text("Delete Gym Squad"),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "This will permanently delete \"$groupName\", remove all members, and erase all squad chat history.",
+                  style: const TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: passController,
+                  enabled: !isDeleting,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: "Confirm Squad Entry Pass",
+                    hintText: "Enter group passkey",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed:
+                    isDeleting ? null : () => Navigator.pop(dialogCtx),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent),
+                onPressed: isDeleting
+                    ? null
+                    : () async {
+                        final enteredPass = passController.text.trim();
+                        if (enteredPass.isEmpty) return;
+
+                        final nav = Navigator.of(dialogCtx);
+                        final messenger = ScaffoldMessenger.of(parentContext);
+                        setDialogState(() => isDeleting = true);
+
+                        try {
+                          final res = await http
+                              .delete(
+                                Uri.parse(
+                                    'https://backend-um5a.onrender.com/api/groups/$groupId'),
+                                headers: {'Content-Type': 'application/json'},
+                                body: json.encode({
+                                  'user_id': dailyTracker.userId,
+                                  'entry_pass': enteredPass,
+                                }),
+                              )
+                              .timeout(const Duration(seconds: 30));
+
+                          if (res.statusCode == 200) {
+                            await dailyTracker.fetchMyGymGroup();
+                            if (nav.canPop()) nav.pop();
+                            setSubState(() {});
+                            if (mounted) setState(() {});
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content:
+                                    Text("Gym Squad deleted successfully."),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          } else {
+                            String detail = "Failed to delete group.";
+                            try {
+                              final body = json.decode(res.body);
+                              if (body['detail'] != null) {
+                                detail = body['detail'].toString();
+                              }
+                            } catch (_) {}
+                            if (dialogCtx.mounted) {
+                              setDialogState(() => isDeleting = false);
+                            }
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(detail),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (dialogCtx.mounted) {
+                            setDialogState(() => isDeleting = false);
+                          }
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text("Connection error. Please retry."),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                child: isDeleting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text("Delete Forever",
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -1250,7 +1397,7 @@ class _GymSquadChatScreenState extends State<GymSquadChatScreen> {
                 style:
                     const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             Text(
-              "${(dailyTracker.activeGymGroup?['members'] as List?)?.length ?? 1} members",
+              "${(dailyTracker.activeGymGroup?['members'] as List?)?.length ?? 1} members • 7-day auto-clear",
               style: const TextStyle(fontSize: 11, color: Colors.grey),
             ),
           ],
@@ -1268,6 +1415,23 @@ class _GymSquadChatScreenState extends State<GymSquadChatScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              color: Colors.deepOrange.withValues(alpha: 0.1),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.auto_delete_outlined,
+                      size: 14, color: Colors.deepOrange),
+                  SizedBox(width: 6),
+                  Text(
+                    "Messages are stored for 7 days and deleted automatically.",
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: messages.isEmpty
                   ? const Center(
