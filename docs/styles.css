@@ -1,32 +1,28 @@
 /* =========================================================
-   FitOak Light Glassmorphism Theme 
+   FitOak Light Glassmorphism + Interactive Cursor Glow & Grid Trails
    ========================================================= */
 
 :root {
   --bg-base: #f4f7fb;
-  --bg-elevated: rgba(255, 255, 255, 0.58);
   --bg-card: rgba(255, 255, 255, 0.62);
-  --bg-card-hover: rgba(255, 255, 255, 0.78);
-  --bg-subcard: rgba(255, 255, 255, 0.72);
+  --bg-card-hover: rgba(255, 255, 255, 0.82);
   --text-main: #0f172a;
   --text-muted: #475569;
   --text-soft: #64748b;
 
   /* Crisp Specular Glass Borders & Shadows */
-  --glass-border: rgba(255, 255, 255, 0.88);
-  --glass-border-outer: rgba(15, 23, 42, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.9);
   --glass-shadow:
     0 18px 42px -12px rgba(15, 23, 42, 0.08),
     0 4px 14px -2px rgba(15, 23, 42, 0.04),
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.95),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.96),
     inset 0 -1px 1px rgba(15, 23, 42, 0.04);
 
-  /* Brand & Iridescent AI Accents */
+  /* Brand & Iridescent Glow Accents */
   --accent-orange: #ff5722;
   --accent-amber: #ff8f00;
   --accent-sky: #38bdf8;
   --accent-indigo: #6366f1;
-  --accent-violet: #a855f7;
 }
 
 * {
@@ -62,7 +58,7 @@ a {
 }
 
 /* =========================================================
-   Light Pastel Ambient Background Mesh (Refracts Through Glass)
+   Light Ambient Mesh + Square Grid + Continuous Glow Trails
    ========================================================= */
 .ambient-bg {
   position: fixed;
@@ -86,7 +82,7 @@ a {
   height: 520px;
   top: -120px;
   left: -80px;
-  background: radial-gradient(circle, rgba(255, 138, 101, 0.42), rgba(255, 204, 128, 0.18));
+  background: radial-gradient(circle, rgba(255, 138, 101, 0.44), rgba(255, 204, 128, 0.18));
 }
 
 .orb-2 {
@@ -94,7 +90,7 @@ a {
   height: 560px;
   top: 12%;
   right: -120px;
-  background: radial-gradient(circle, rgba(125, 211, 252, 0.45), rgba(165, 180, 252, 0.24));
+  background: radial-gradient(circle, rgba(125, 211, 252, 0.46), rgba(165, 180, 252, 0.24));
   animation-delay: -6s;
 }
 
@@ -103,24 +99,125 @@ a {
   height: 480px;
   bottom: -100px;
   left: 28%;
-  background: radial-gradient(circle, rgba(216, 180, 254, 0.36), rgba(253, 186, 116, 0.22));
+  background: radial-gradient(circle, rgba(216, 180, 254, 0.38), rgba(253, 186, 116, 0.22));
   animation-delay: -11s;
 }
 
+/* Square Grid Boxes (48px x 48px matching canvas trails) */
 .grid-overlay {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(to right, rgba(15, 23, 42, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
-  background-size: 44px 44px;
-  -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 85%);
-  mask-image: radial-gradient(ellipse at center, black 40%, transparent 85%);
+    linear-gradient(to right, rgba(99, 102, 241, 0.065) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.065) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Canvas rendering continuous glowing light trails along the square grid lines */
+#gridTrailCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Interactive Background Cursor Aura */
+.cursor-aura {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 540px;
+  height: 540px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 87, 34, 0.16) 0%,
+    rgba(99, 102, 241, 0.14) 32%,
+    rgba(56, 189, 248, 0.08) 55%,
+    transparent 72%
+  );
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  mix-blend-mode: multiply;
+}
+
+body.cursor-active .cursor-aura {
+  opacity: 1;
 }
 
 @keyframes floatOrb {
   0% { transform: translate(0, 0) scale(1); }
   100% { transform: translate(35px, 28px) scale(1.07); }
+}
+
+/* =========================================================
+   Universal Interactive Cursor Glow Helpers (Tabs, Text, Cards)
+   ========================================================= */
+.glow-surface {
+  position: relative;
+  overflow: hidden;
+}
+
+.glow-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    320px circle at var(--gx, 50%) var(--gy, 50%),
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 138, 101, 0.22) 32%,
+    rgba(99, 102, 241, 0.18) 58%,
+    transparent 80%
+  );
+  opacity: 0;
+  transition: opacity 0.28s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.glow-surface:hover::after {
+  opacity: 1;
+}
+
+.glow-surface > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Tabs, Links, Pills, Cells Glow on Hover */
+.glow-tab {
+  position: relative;
+  transition:
+    color 0.22s ease,
+    background 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.25s ease,
+    transform 0.2s ease,
+    text-shadow 0.22s ease;
+}
+
+.glow-tab:hover {
+  color: var(--accent-orange) !important;
+  text-shadow: 0 0 14px rgba(255, 87, 34, 0.45), 0 0 26px rgba(99, 102, 241, 0.28);
+  box-shadow:
+    0 0 20px rgba(255, 87, 34, 0.26),
+    0 0 34px rgba(99, 102, 241, 0.22),
+    inset 0 1px 1px #fff;
+}
+
+/* Text Luminance Glow on Cursor Hover */
+.glow-text {
+  transition: text-shadow 0.24s ease, color 0.24s ease;
+}
+
+.glow-text:hover {
+  text-shadow:
+    0 0 16px rgba(255, 87, 34, 0.34),
+    0 0 28px rgba(99, 102, 241, 0.26),
+    0 0 4px rgba(255, 255, 255, 0.95);
 }
 
 .container {
@@ -133,7 +230,7 @@ a {
 }
 
 /* =========================================================
-   Floating Frosted Navigation
+   Floating Frosted Navigation & Glowing Tabs
    ========================================================= */
 .site-header {
   position: sticky;
@@ -156,6 +253,14 @@ a {
     0 10px 30px rgba(15, 23, 42, 0.06),
     0 1px 2px rgba(15, 23, 42, 0.05),
     inset 0 1.5px 1px rgba(255, 255, 255, 1);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.glass-nav:hover {
+  box-shadow:
+    0 14px 36px rgba(99, 102, 241, 0.16),
+    0 0 24px rgba(255, 87, 34, 0.14),
+    inset 0 1.5px 1px #fff;
 }
 
 .brand {
@@ -183,19 +288,22 @@ a {
 
 .nav-links {
   display: flex;
-  gap: 26px;
+  gap: 8px;
   align-items: center;
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-muted);
 }
 
-.nav-links a {
-  transition: color 0.2s ease;
+.nav-tab {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
 }
 
-.nav-links a:hover {
-  color: var(--text-main);
+.nav-tab:hover {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: #fff;
 }
 
 .nav-actions {
@@ -215,15 +323,12 @@ a {
   box-shadow:
     0 4px 12px rgba(15, 23, 42, 0.06),
     inset 0 1px 0 #fff;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
   white-space: nowrap;
 }
 
 .glass-pill-btn:hover {
   transform: translateY(-1px);
-  box-shadow:
-    0 8px 18px rgba(255, 87, 34, 0.15),
-    inset 0 1px 0 #fff;
+  background: #fff;
 }
 
 .menu-toggle {
@@ -259,15 +364,11 @@ a {
 }
 
 .mobile-drawer a {
-  padding: 10px 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
   font-weight: 600;
   font-size: 0.95rem;
   color: var(--text-main);
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-}
-
-.mobile-drawer a:last-child {
-  border-bottom: none;
 }
 
 /* =========================================================
@@ -286,23 +387,22 @@ a {
   color: #0f172a;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.88) 0%,
-    rgba(255, 255, 255, 0.56) 100%
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(255, 255, 255, 0.58) 100%
   );
   backdrop-filter: blur(18px) saturate(190%);
   -webkit-backdrop-filter: blur(18px) saturate(190%);
   border: 1px solid rgba(255, 255, 255, 0.95);
   box-shadow:
-    0 14px 32px -6px rgba(99, 102, 241, 0.22),
-    0 6px 16px -4px rgba(255, 87, 34, 0.18),
+    0 14px 32px -6px rgba(99, 102, 241, 0.24),
+    0 6px 16px -4px rgba(255, 87, 34, 0.2),
     inset 0 2px 2px rgba(255, 255, 255, 1),
-    inset 0 -2px 4px rgba(99, 102, 241, 0.12);
+    inset 0 -2px 4px rgba(99, 102, 241, 0.14);
   overflow: hidden;
   transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
   cursor: pointer;
 }
 
-/* Iridescent AI Glass Rim Halo */
 .glass-ai-btn__rim {
   position: absolute;
   inset: -2px;
@@ -315,7 +415,7 @@ a {
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  opacity: 0.72;
+  opacity: 0.78;
   pointer-events: none;
 }
 
@@ -325,7 +425,6 @@ a {
   100% { background-position: 0% 50%; }
 }
 
-/* Specular Glass Light Sweep */
 .glass-ai-btn__sheen {
   position: absolute;
   top: 0;
@@ -335,7 +434,7 @@ a {
   background: linear-gradient(
     105deg,
     transparent 20%,
-    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0.92) 50%,
     transparent 80%
   );
   transform: skewX(-20deg);
@@ -349,12 +448,11 @@ a {
 }
 
 .glass-ai-btn:hover {
-  transform: translateY(-2px) scale(1.015);
+  transform: translateY(-2px) scale(1.02);
   box-shadow:
-    0 20px 40px -8px rgba(99, 102, 241, 0.32),
-    0 10px 22px -4px rgba(255, 87, 34, 0.24),
-    inset 0 2px 2px rgba(255, 255, 255, 1),
-    inset 0 -2px 5px rgba(99, 102, 241, 0.18);
+    0 0 28px rgba(255, 87, 34, 0.42),
+    0 0 46px rgba(99, 102, 241, 0.36),
+    inset 0 2px 2px rgba(255, 255, 255, 1);
 }
 
 .glass-ai-btn:active {
@@ -382,18 +480,17 @@ a {
   font-weight: 600;
   font-size: 0.96rem;
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.52);
+  background: rgba(255, 255, 255, 0.56);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.88);
   box-shadow:
     0 8px 20px rgba(15, 23, 42, 0.05),
     inset 0 1px 1px #fff;
-  transition: all 0.22s ease;
 }
 
 .glass-secondary-btn:hover {
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.9);
   transform: translateY(-2px);
 }
 
@@ -422,6 +519,11 @@ a {
   font-weight: 600;
   color: var(--text-muted);
   margin-bottom: 22px;
+  transition: box-shadow 0.25s ease;
+}
+
+.glass-badge:hover {
+  box-shadow: 0 0 24px rgba(255, 87, 34, 0.28), 0 0 36px rgba(99, 102, 241, 0.22);
 }
 
 .badge-sparkle {
@@ -472,8 +574,8 @@ a {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.88);
 }
 
 /* =========================================================
@@ -493,8 +595,8 @@ a {
   border-radius: 32px;
   background: linear-gradient(
     160deg,
-    rgba(255, 255, 255, 0.78) 0%,
-    rgba(255, 255, 255, 0.48) 100%
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(255, 255, 255, 0.5) 100%
   );
   backdrop-filter: blur(26px) saturate(185%);
   -webkit-backdrop-filter: blur(26px) saturate(185%);
@@ -504,8 +606,14 @@ a {
     0 8px 20px -4px rgba(99, 102, 241, 0.1),
     inset 0 2px 2px rgba(255, 255, 255, 1),
     inset 0 -2px 4px rgba(15, 23, 42, 0.04);
-  overflow: hidden;
-  transition: transform 0.25s ease;
+  transition: transform 0.25s ease, box-shadow 0.28s ease;
+}
+
+.glass-device:hover {
+  box-shadow:
+    0 28px 60px -12px rgba(99, 102, 241, 0.24),
+    0 0 36px rgba(255, 87, 34, 0.2),
+    inset 0 2px 2px #fff;
 }
 
 .glass-device__glare {
@@ -551,6 +659,11 @@ a {
   box-shadow:
     0 6px 18px rgba(15, 23, 42, 0.04),
     inset 0 1px 0 #fff;
+  transition: box-shadow 0.25s ease;
+}
+
+.glass-subcard:hover {
+  box-shadow: 0 0 24px rgba(255, 87, 34, 0.18), 0 0 32px rgba(99, 102, 241, 0.16);
 }
 
 .macro-header {
@@ -654,7 +767,6 @@ a {
     inset 0 1px 0 #fff;
   cursor: pointer;
   overflow: hidden;
-  transition: transform 0.18s ease;
 }
 
 .glass-action-sim:active {
@@ -704,7 +816,6 @@ a {
 }
 
 .glass-card {
-  position: relative;
   background: var(--bg-card);
   backdrop-filter: blur(22px) saturate(175%);
   -webkit-backdrop-filter: blur(22px) saturate(175%);
@@ -719,7 +830,8 @@ a {
   transform: translateY(-4px);
   background: var(--bg-card-hover);
   box-shadow:
-    0 24px 48px -12px rgba(15, 23, 42, 0.11),
+    0 24px 48px -12px rgba(99, 102, 241, 0.22),
+    0 0 32px rgba(255, 87, 34, 0.18),
     inset 0 1.5px 1px #fff;
 }
 
@@ -737,6 +849,12 @@ a {
   justify-content: center;
   margin-bottom: 18px;
   box-shadow: 0 6px 14px rgba(15, 23, 42, 0.05), inset 0 1px 0 #fff;
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.glass-card:hover .card-icon {
+  box-shadow: 0 0 20px rgba(255, 87, 34, 0.35), 0 0 28px rgba(99, 102, 241, 0.25);
+  transform: scale(1.06);
 }
 
 .glass-card h3 {
@@ -751,7 +869,7 @@ a {
 }
 
 /* =========================================================
-   Interactive Sandbox
+   Interactive Sandbox Tabs
    ========================================================= */
 .sandbox-grid {
   display: grid;
@@ -792,21 +910,19 @@ a {
   padding: 8px 14px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.65);
   color: var(--text-main);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04);
-  transition: all 0.2s ease;
 }
 
-.glass-chip:hover,
 .glass-chip.active {
   background: #fff;
   border-color: var(--accent-orange);
   color: var(--accent-orange);
-  box-shadow: 0 6px 16px rgba(255, 87, 34, 0.14);
+  box-shadow: 0 0 18px rgba(255, 87, 34, 0.28), 0 0 28px rgba(99, 102, 241, 0.18);
 }
 
 .sim-top {
@@ -927,6 +1043,11 @@ code {
   border-radius: 20px;
   padding: 18px 22px;
   box-shadow: var(--glass-shadow);
+  transition: box-shadow 0.25s ease;
+}
+
+.glass-faq:hover {
+  box-shadow: 0 0 26px rgba(255, 87, 34, 0.2), 0 0 38px rgba(99, 102, 241, 0.18);
 }
 
 .glass-faq summary {
@@ -1006,14 +1127,13 @@ code {
 }
 
 .footer-grid li a {
+  display: inline-block;
+  padding: 3px 8px;
+  margin-left: -8px;
+  border-radius: 999px;
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--text-muted);
-  transition: color 0.2s ease;
-}
-
-.footer-grid li a:hover {
-  color: var(--accent-orange);
 }
 
 .footer-bottom {
@@ -1109,5 +1229,47 @@ code {
   .footer-bottom {
     justify-content: center;
     text-align: center;
+  }
+}
+
+/* =========================================================
+   FitOak App Logo Styling (Top-Left Corner & Footer)
+   ========================================================= */
+.brand-logo-wrap {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.98);
+  box-shadow:
+    0 4px 14px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 #fff;
+  transition: transform 0.22s ease, box-shadow 0.25s ease;
+}
+
+.brand-logo-wrap:hover {
+  transform: translateY(-1px) scale(1.03);
+  box-shadow:
+    0 0 22px rgba(255, 87, 34, 0.36),
+    0 0 34px rgba(99, 102, 241, 0.24),
+    inset 0 1px 0 #fff;
+}
+
+.brand-logo-img {
+  display: block;
+  height: 44px;
+  width: auto;
+  border-radius: 11px;
+  object-fit: contain;
+}
+
+.footer-logo-img {
+  height: 54px;
+}
+
+@media (max-width: 600px) {
+  .brand-logo-img {
+    height: 38px;
   }
 }

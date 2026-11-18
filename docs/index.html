@@ -59,6 +59,10 @@
   }
   </script>
 
+  <!-- App Favicon / Logo -->
+  <link rel="icon" type="image/jpeg" href="app_icon_2.jpg" />
+  <link rel="apple-touch-icon" href="app_icon_2.jpg" />
+
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -69,38 +73,35 @@
 </head>
 <body>
 
-  <!-- Soft Pastel Light-Theme Ambient Mesh Orbs -->
+  <!-- Interactive Ambient Background + Continuous Square Grid Glow Trails -->
   <div class="ambient-bg" aria-hidden="true">
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
     <div class="orb orb-3"></div>
     <div class="grid-overlay"></div>
+    <canvas id="gridTrailCanvas"></canvas>
+    <div class="cursor-aura" id="cursorAura"></div>
   </div>
 
   <!-- Floating Glass Header -->
   <header class="site-header">
-    <nav class="glass-nav container">
-      <a href="#" class="brand">
-        <span class="brand-icon">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6.5 6.5h11M6.5 17.5h11M4 10v4M20 10v4M8 8v8M16 8v8M8 12h8"/>
-          </svg>
-        </span>
-        <span>FitOak</span>
+    <nav class="glass-nav glow-surface container">
+      <a href="#" class="brand brand-logo-wrap glow-tab" aria-label="FitOak Home">
+        <img src="app_icon_2.jpg" alt="FitOak Logo – Power up! Your Progress" class="brand-logo-img" />
       </a>
 
       <div class="nav-links">
-        <a href="#features">Features</a>
-        <a href="#sandbox">Live Demo</a>
-        <a href="#install">Install Guide</a>
-        <a href="#faq">FAQ</a>
+        <a href="#features" class="nav-tab glow-tab">Features</a>
+        <a href="#sandbox" class="nav-tab glow-tab">Live Demo</a>
+        <a href="#install" class="nav-tab glow-tab">Install Guide</a>
+        <a href="#faq" class="nav-tab glow-tab">FAQ</a>
       </div>
 
       <div class="nav-actions">
-        <a href="https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0/Fitoak.apk" class="glass-pill-btn">
+        <a href="https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0/Fitoak.apk" class="glass-pill-btn glow-tab">
           <span>Download v1.1.0</span>
         </a>
-        <button type="button" class="menu-toggle" id="menuToggle" aria-label="Toggle navigation menu" aria-expanded="false">
+        <button type="button" class="menu-toggle glow-tab" id="menuToggle" aria-label="Toggle navigation menu" aria-expanded="false">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
             <line x1="4" y1="7" x2="20" y2="7"></line>
             <line x1="4" y1="12" x2="20" y2="12"></line>
@@ -111,12 +112,12 @@
     </nav>
 
     <!-- Mobile Glass Drawer -->
-    <div class="mobile-drawer container" id="mobileDrawer">
-      <a href="#features" class="drawer-link">Features</a>
-      <a href="#sandbox" class="drawer-link">Live Demo</a>
-      <a href="#install" class="drawer-link">Install Guide</a>
-      <a href="#faq" class="drawer-link">FAQ</a>
-      <a href="https://github.com/pandyadhruv014-ui/FitOak" target="_blank" rel="noopener" class="drawer-link">GitHub Source</a>
+    <div class="mobile-drawer glow-surface container" id="mobileDrawer">
+      <a href="#features" class="drawer-link glow-tab">Features</a>
+      <a href="#sandbox" class="drawer-link glow-tab">Live Demo</a>
+      <a href="#install" class="drawer-link glow-tab">Install Guide</a>
+      <a href="#faq" class="drawer-link glow-tab">FAQ</a>
+      <a href="https://github.com/pandyadhruv014-ui/FitOak" target="_blank" rel="noopener" class="drawer-link glow-tab">GitHub Source</a>
     </div>
   </header>
 
@@ -124,24 +125,24 @@
     <!-- Hero Section -->
     <section class="hero container">
       <div class="hero-copy">
-        <div class="glass-badge">
+        <div class="glass-badge glow-surface">
           <span class="badge-sparkle">✦</span>
-          <span>Official Android Release v1.1.0 &bull; Free APK</span>
+          <span class="glow-text">Official Android Release v1.1.0 &bull; Free APK</span>
         </div>
 
-        <h1>
+        <h1 class="glow-text">
           Train Smarter with <span class="gradient-accent">FitOak AI</span> &amp; Power Up Your Progress.
         </h1>
 
-        <p class="hero-lead">
-          Engineered with Flutter, FastAPI, and Fitoak AI. Log strength sets with automated 20% drop-set calculations, collaborate with your Gym Buddy Squad, and analyze meal macros in seconds.
+        <p class="hero-lead glow-text">
+          Engineered with Flutter, FastAPI, and Python. Log strength sets with automated 20% drop-set calculations, collaborate with your Gym Buddy Squad, and analyze meal macros in seconds.
         </p>
 
         <!-- ThreeUI Glass AI Button Inspired Primary CTA -->
         <div class="cta-cluster">
           <a
             href="https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0/Fitoak.apk"
-            class="glass-ai-btn"
+            class="glass-ai-btn glow-surface"
             id="glassAiBtn"
             rel="noopener"
           >
@@ -159,7 +160,7 @@
 
           <a
             href="https://github.com/pandyadhruv014-ui/FitOak"
-            class="glass-secondary-btn"
+            class="glass-secondary-btn glow-tab"
             target="_blank"
             rel="noopener"
           >
@@ -168,56 +169,56 @@
         </div>
 
         <div class="trust-pills">
-          <span class="trust-chip">✓ Android 8.0+</span>
-          <span class="trust-chip">✓ Zero Ads</span>
-          <span class="trust-chip">✓ AI Powered</span>
-          <span class="trust-chip">✓ Direct Release</span>
+          <span class="trust-chip glow-tab">✓ Android 8.0+</span>
+          <span class="trust-chip glow-tab">✓ Zero Ads</span>
+          <span class="trust-chip glow-tab">✓ AI Powered</span>
+          <span class="trust-chip glow-tab">✓ Direct Release</span>
         </div>
       </div>
 
       <!-- Frosted Glass App Preview Card -->
       <div class="hero-visual">
-        <div class="glass-device" id="glassDevice">
+        <div class="glass-device glow-surface" id="glassDevice">
           <div class="glass-device__glare"></div>
           <div class="device-top-bar">
-            <span class="device-title">Diet &amp; Meal Tracker</span>
-            <span class="device-pill">Lean Bulk</span>
+            <span class="device-title glow-text">Diet &amp; Meal Tracker</span>
+            <span class="device-pill glow-tab">Lean Bulk</span>
           </div>
 
-          <div class="glass-subcard">
+          <div class="glass-subcard glow-surface">
             <div class="macro-header">
-              <span>Daily Calorie Target</span>
-              <strong id="hudCalText">1,420 / 2,600 kcal</strong>
+              <span class="glow-text">Daily Calorie Target</span>
+              <strong id="hudCalText" class="glow-text">1,420 / 2,600 kcal</strong>
             </div>
             <div class="glass-progress">
               <div class="glass-progress__fill" id="hudCalBar" style="width: 55%;"></div>
             </div>
 
             <div class="macro-grid">
-              <div class="macro-cell">
+              <div class="macro-cell glow-tab">
                 <strong id="hudProt">98g</strong>
                 <span>Protein / 150g</span>
               </div>
-              <div class="macro-cell">
+              <div class="macro-cell glow-tab">
                 <strong id="hudCarb">164g</strong>
                 <span>Carbs / 300g</span>
               </div>
-              <div class="macro-cell">
+              <div class="macro-cell glow-tab">
                 <strong id="hudFat">41g</strong>
                 <span>Fat / 75g</span>
               </div>
             </div>
           </div>
 
-          <div class="glass-subcard squad-row">
+          <div class="glass-subcard glow-surface squad-row">
             <div>
               <div class="squad-label">Active Gym Squad</div>
-              <div class="squad-name">IRONMANS &bull; 4 Members Online</div>
+              <div class="squad-name glow-text">IRON2026 &bull; 4 Members Online</div>
             </div>
-            <span class="squad-badge">Live</span>
+            <span class="squad-badge glow-tab">Live</span>
           </div>
 
-          <button type="button" class="glass-action-sim" id="simulateMealBtn">
+          <button type="button" class="glass-action-sim glow-tab" id="simulateMealBtn">
             <span class="glass-ai-btn__sheen"></span>
             <span>✦ Simulate AI Meal Log (+450 kcal)</span>
           </button>
@@ -228,56 +229,56 @@
     <!-- Features Section -->
     <section id="features" class="section container reveal">
       <div class="section-head">
-        <span class="eyebrow">Core Capabilities</span>
-        <h2>Everything You Need in One Frosted Workspace</h2>
-        <p>Unifying AI macro tracking, automated drop-set strength logging, and real-time Gym Squad accountability.</p>
+        <span class="eyebrow glow-text">Core Capabilities</span>
+        <h2 class="glow-text">Everything You Need in One Frosted Workspace</h2>
+        <p class="glow-text">Unifying AI macro tracking, automated drop-set strength logging, and real-time Gym Squad accountability.</p>
       </div>
 
       <div class="bento-grid">
-        <article class="glass-card">
+        <article class="glass-card glow-surface">
           <div class="card-icon">✦</div>
-          <h3>AI Meal &amp; Macro Analyzer</h3>
-          <p>
+          <h3 class="glow-text">AI Meal &amp; Macro Analyzer</h3>
+          <p class="glow-text">
             Type natural-language dishes like <em>"200g Paneer Tikka"</em> or <em>"100g Boiled Black Chana"</em> to compute instant calories, protein, carbs, and fats via AI.
           </p>
         </article>
 
-        <article class="glass-card">
+        <article class="glass-card glow-surface">
           <div class="card-icon">⚡</div>
-          <h3>Drop Sets &amp; Super Sets</h3>
-          <p>
+          <h3 class="glow-text">Drop Sets &amp; Super Sets</h3>
+          <p class="glow-text">
             Toggle Drop Set Mode to automatically compute a 20% weight reduction across consecutive sets, or pair exercises across 7 major muscle groups.
           </p>
         </article>
 
-        <article class="glass-card">
+        <article class="glass-card glow-surface">
           <div class="card-icon">◈</div>
-          <h3>Gym Buddy Squad</h3>
-          <p>
+          <h3 class="glow-text">Gym Buddy Squad</h3>
+          <p class="glow-text">
             Create or join a private squad with a shared entry pass, co-log workouts across training partners in one tap, and chat with real-time push alerts.
           </p>
         </article>
 
-        <article class="glass-card">
+        <article class="glass-card glow-surface">
           <div class="card-icon">★</div>
-          <h3>Highest PR Records</h3>
-          <p>
+          <h3 class="glow-text">Highest PR Records</h3>
+          <p class="glow-text">
             Automatically detects and archives all-time personal records (PRs) across Chest, Back, Shoulders, Biceps, Triceps, Legs, and Abs.
           </p>
         </article>
 
-        <article class="glass-card">
+        <article class="glass-card glow-surface">
           <div class="card-icon">◉</div>
-          <h3>Cardio &amp; Sensor Pedometer</h3>
-          <p>
+          <h3 class="glow-text">Cardio &amp; Sensor Pedometer</h3>
+          <p class="glow-text">
             Uses built-in hardware accelerometer and pedometer streams to track live daily step counts, distance covered, and active calories burned.
           </p>
         </article>
 
-        <article class="glass-card">
+        <article class="glass-card glow-surface">
           <div class="card-icon">❖</div>
-          <h3>Smart Gym &amp; Water Alerts</h3>
-          <p>
+          <h3 class="glow-text">Smart Gym &amp; Water Alerts</h3>
+          <p class="glow-text">
             Synchronized Monday–Saturday gym session alarms and daily hydration progress charts keep your routine consistent every week.
           </p>
         </article>
@@ -287,38 +288,38 @@
     <!-- Interactive Live Demo Sandbox -->
     <section id="sandbox" class="section container reveal">
       <div class="section-head">
-        <span class="eyebrow">Interactive Preview</span>
-        <h2>Test FitOak's Engines Live</h2>
-        <p>Try the AI Nutrition macro parser and automated 20% Drop-Set calculator right in your browser.</p>
+        <span class="eyebrow glow-text">Interactive Preview</span>
+        <h2 class="glow-text">Test FitOak's Engines Live</h2>
+        <p class="glow-text">Try the AI Nutrition macro parser and automated 20% Drop-Set calculator right in your browser.</p>
       </div>
 
       <div class="sandbox-grid">
         <!-- AI Nutrition Demo -->
-        <div class="glass-card sandbox-card">
-          <h3><span class="inline-badge">AI</span> Macro Parser Demo</h3>
-          <p class="sandbox-desc">Select a meal below to inspect structured macro extraction:</p>
+        <div class="glass-card glow-surface sandbox-card">
+          <h3 class="glow-text"><span class="inline-badge">AI</span> Macro Parser Demo</h3>
+          <p class="sandbox-desc glow-text">Select a meal tab below to inspect structured macro extraction:</p>
 
           <div class="chip-row" id="mealChips">
-            <button type="button" class="glass-chip active" data-cal="520" data-p="36" data-c="14" data-f="34" data-name="Paneer Tikka (200g)">Paneer Tikka (200g)</button>
-            <button type="button" class="glass-chip" data-cal="364" data-p="19" data-c="61" data-f="6" data-name="Boiled Black Chana (100g)">Boiled Black Chana (100g)</button>
-            <button type="button" class="glass-chip" data-cal="410" data-p="32" data-c="48" data-f="9" data-name="Oats &amp; Whey Shake">Oats &amp; Whey Shake</button>
+            <button type="button" class="glass-chip glow-tab active" data-cal="520" data-p="36" data-c="14" data-f="34" data-name="Paneer Tikka (200g)">Paneer Tikka (200g)</button>
+            <button type="button" class="glass-chip glow-tab" data-cal="364" data-p="19" data-c="61" data-f="6" data-name="Boiled Black Chana (100g)">Boiled Black Chana (100g)</button>
+            <button type="button" class="glass-chip glow-tab" data-cal="410" data-p="32" data-c="48" data-f="9" data-name="Oats &amp; Whey Shake">Oats &amp; Whey Shake</button>
           </div>
 
-          <div class="glass-subcard">
+          <div class="glass-subcard glow-surface">
             <div class="sim-top">
-              <strong id="simMealTitle">Paneer Tikka (200g)</strong>
-              <span class="cal-pill" id="simMealCal">520 kcal</span>
+              <strong id="simMealTitle" class="glow-text">Paneer Tikka (200g)</strong>
+              <span class="cal-pill glow-text" id="simMealCal">520 kcal</span>
             </div>
             <div class="macro-grid">
-              <div class="macro-cell">
+              <div class="macro-cell glow-tab">
                 <strong id="simMealP">36g</strong>
                 <span>Protein</span>
               </div>
-              <div class="macro-cell">
+              <div class="macro-cell glow-tab">
                 <strong id="simMealC">14g</strong>
                 <span>Carbs</span>
               </div>
-              <div class="macro-cell">
+              <div class="macro-cell glow-tab">
                 <strong id="simMealF">34g</strong>
                 <span>Fat</span>
               </div>
@@ -327,26 +328,26 @@
         </div>
 
         <!-- 20% Drop Set Calculator -->
-        <div class="glass-card sandbox-card">
-          <h3><span class="inline-badge">20%</span> Automated Drop-Set Engine</h3>
-          <p class="sandbox-desc">Adjust your working top-set weight to compute consecutive drop sets:</p>
+        <div class="glass-card glow-surface sandbox-card">
+          <h3 class="glow-text"><span class="inline-badge">20%</span> Automated Drop-Set Engine</h3>
+          <p class="sandbox-desc glow-text">Adjust your working top-set weight to compute consecutive drop sets:</p>
 
           <div class="slider-row">
-            <label for="weightSlider">Top Set:</label>
+            <label for="weightSlider" class="glow-text">Top Set:</label>
             <input type="range" id="weightSlider" min="20" max="200" step="5" value="100" />
-            <strong id="topWeightLabel">100 kg</strong>
+            <strong id="topWeightLabel" class="glow-text">100 kg</strong>
           </div>
 
           <div class="set-grid">
-            <div class="macro-cell">
+            <div class="macro-cell glow-tab">
               <span>Set 1 (Top)</span>
               <strong id="dropSet1">100 kg</strong>
             </div>
-            <div class="macro-cell">
+            <div class="macro-cell glow-tab">
               <span>Set 2 (-20%)</span>
               <strong id="dropSet2">80 kg</strong>
             </div>
-            <div class="macro-cell">
+            <div class="macro-cell glow-tab">
               <span>Set 3 (-20%)</span>
               <strong id="dropSet3">64 kg</strong>
             </div>
@@ -357,19 +358,19 @@
 
     <!-- Installation Guide -->
     <section id="install" class="section container reveal">
-      <div class="glass-card install-card">
-        <span class="eyebrow">Quick Setup</span>
-        <h2>How to Install FitOak v1.1.0 on Android</h2>
-        <p class="sandbox-desc">Direct installation from GitHub Releases takes under 30 seconds.</p>
+      <div class="glass-card glow-surface install-card">
+        <span class="eyebrow glow-text">Quick Setup</span>
+        <h2 class="glow-text">How to Install FitOak v1.1.0 on Android</h2>
+        <p class="sandbox-desc glow-text">Direct installation from GitHub Releases takes under 30 seconds.</p>
 
         <ol class="step-list">
-          <li>
+          <li class="glow-text">
             <strong>Download the Official APK:</strong> Tap <em>Download FitOak APK (v1.1.0)</em> to fetch <code>Fitoak.apk</code> directly from GitHub Releases.
           </li>
-          <li>
+          <li class="glow-text">
             <strong>Permit App Installation:</strong> Open <code>Fitoak.apk</code> from your browser downloads or File Manager. If prompted by Android, tap <em>Settings</em> and enable <em>Allow from this source</em>.
           </li>
-          <li>
+          <li class="glow-text">
             <strong>Launch &amp; Personalize:</strong> Tap <em>Install</em>, open FitOak, and set up your height, weight, and fitness goal to unlock personalized macro targets.
           </li>
         </ol>
@@ -379,25 +380,25 @@
     <!-- FAQ Section -->
     <section id="faq" class="section container reveal">
       <div class="section-head">
-        <span class="eyebrow">Support &amp; Info</span>
-        <h2>Frequently Asked Questions</h2>
-        <p>Everything you need to know about the FitOak Android release.</p>
+        <span class="eyebrow glow-text">Support &amp; Info</span>
+        <h2 class="glow-text">Frequently Asked Questions</h2>
+        <p class="glow-text">Everything you need to know about the FitOak Android release.</p>
       </div>
 
       <div class="faq-stack">
-        <details class="glass-faq">
-          <summary>Is FitOak free to download and use?</summary>
-          <p>Yes. FitOak v1.1.0 is completely free to download directly from GitHub Releases with zero advertisements or hidden paywalls.</p>
+        <details class="glass-faq glow-surface">
+          <summary class="glow-text">Is FitOak free to download and use?</summary>
+          <p class="glow-text">Yes. FitOak v1.1.0 is completely free to download directly from GitHub Releases with zero advertisements or hidden paywalls.</p>
         </details>
 
-        <details class="glass-faq">
-          <summary>How does the AI Nutrition &amp; Calorie Tracker work?</summary>
-          <p>Enter any dish name and portion size (e.g., "100g boiled black chana" or "2 whole eggs"), and FitOak's FastAPI + Gemini AI backend returns accurate calories, protein, carbs, and fat automatically.</p>
+        <details class="glass-faq glow-surface">
+          <summary class="glow-text">How does the AI Nutrition &amp; Calorie Tracker work?</summary>
+          <p class="glow-text">Enter any dish name and portion size (e.g., "100g boiled black chana" or "2 whole eggs"), and FitOak's FastAPI + AI returns accurate calories, protein, carbs, and fat automatically.</p>
         </details>
 
-        <details class="glass-faq">
-          <summary>What Android versions are supported?</summary>
-          <p>FitOak supports Android 8.0 (Oreo) through Android 15, including full support for runtime notification permissions and background Firebase push alerts.</p>
+        <details class="glass-faq glow-surface">
+          <summary class="glow-text">What Android versions are supported?</summary>
+          <p class="glow-text">FitOak supports Android 8.0 (Oreo) through Android 15, including full support for runtime notification permissions and background push alerts.</p>
         </details>
       </div>
     </section>
@@ -405,15 +406,15 @@
 
   <!-- Frosted Glass Footer -->
   <footer class="site-footer container">
-    <div class="glass-card footer-shell">
+    <div class="glass-card glow-surface footer-shell">
       <div class="footer-cta">
         <div>
-          <h2>Ready to Power Up Your Training?</h2>
-          <p>Download FitOak v1.1.0 for Android and start tracking smarter today.</p>
+          <h2 class="glow-text">Ready to Power Up Your Training?</h2>
+          <p class="glow-text">Download FitOak v1.1.0 for Android and start tracking smarter today.</p>
         </div>
         <a
           href="https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0/Fitoak.apk"
-          class="glass-ai-btn"
+          class="glass-ai-btn glow-surface"
           rel="noopener"
         >
           <span class="glass-ai-btn__rim"></span>
@@ -431,15 +432,10 @@
 
       <div class="footer-grid">
         <div>
-          <a href="#" class="brand">
-            <span class="brand-icon">
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M6.5 6.5h11M6.5 17.5h11M4 10v4M20 10v4M8 8v8M16 8v8M8 12h8"/>
-              </svg>
-            </span>
-            <span>FitOak</span>
+          <a href="#" class="brand brand-logo-wrap glow-tab" aria-label="FitOak Home">
+            <img src="app_icon_2.jpg" alt="FitOak Logo – Power up! Your Progress" class="brand-logo-img footer-logo-img" />
           </a>
-          <p class="footer-about">
+          <p class="footer-about glow-text">
             Full-stack AI fitness, strength progression, and Gym Squad collaboration engineered with Flutter, FastAPI, PostgreSQL, and Python.
           </p>
         </div>
@@ -447,34 +443,34 @@
         <div>
           <h4>Product</h4>
           <ul>
-            <li><a href="#features">AI Macro Tracker</a></li>
-            <li><a href="#features">Drop-Set Logger</a></li>
-            <li><a href="#features">Gym Buddy Squad</a></li>
-            <li><a href="#sandbox">Live Demo</a></li>
+            <li><a href="#features" class="glow-tab">AI Macro Tracker</a></li>
+            <li><a href="#features" class="glow-tab">Drop-Set Logger</a></li>
+            <li><a href="#features" class="glow-tab">Gym Buddy Squad</a></li>
+            <li><a href="#sandbox" class="glow-tab">Live Demo</a></li>
           </ul>
         </div>
 
         <div>
           <h4>Release</h4>
           <ul>
-            <li><a href="https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0/Fitoak.apk">Download v1.1.0 APK</a></li>
-            <li><a href="#install">Installation Guide</a></li>
-            <li><a href="#faq">Android Compatibility</a></li>
+            <li><a href="https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0/Fitoak.apk" class="glow-tab">Download v1.1.0 APK</a></li>
+            <li><a href="#install" class="glow-tab">Installation Guide</a></li>
+            <li><a href="#faq" class="glow-tab">Android Compatibility</a></li>
           </ul>
         </div>
 
         <div>
           <h4>Developer</h4>
           <ul>
-            <li><a href="https://github.com/pandyadhruv014-ui/FitOak" target="_blank" rel="noopener">GitHub Source</a></li>
-            <li><a href="https://github.com/pandyadhruv014-ui" target="_blank" rel="noopener">Dhruv Pandya</a></li>
+            <li><a href="https://github.com/pandyadhruv014-ui/FitOak" target="_blank" rel="noopener" class="glow-tab">GitHub Source</a></li>
+            <li><a href="https://github.com/pandyadhruv014-ui" target="_blank" rel="noopener" class="glow-tab">Dhruv Pandya</a></li>
           </ul>
         </div>
       </div>
 
       <div class="footer-bottom">
-        <span>&copy; 2026 FitOak. Engineered by Dhruv Pandya.</span>
-        <span>Release v1.1.0 &bull; Android Package (APK)</span>
+        <span class="glow-text">&copy; 2026 FitOak. Engineered by Dhruv Pandya.</span>
+        <span class="glow-text">Release v1.1.0 &bull; Android Package (APK)</span>
       </div>
     </div>
   </footer>
