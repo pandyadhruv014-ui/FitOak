@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://fitoak-docs-519q.vercel.app/sitemap.xml
