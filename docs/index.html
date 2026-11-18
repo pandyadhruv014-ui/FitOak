@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
   <meta name="google-site-verification" content="lVzZOu_nz6xhEdHcN3zerEjvMKSjqbGxAKqdA4NbUyE" />
   <title>FitOak – Power Up! Your Progress (Official Android APK)</title>
   <meta name="description" content="Download FitOak Android APK – AI-powered fitness, strength training with automated 20% drop sets, Gym Buddy Squad, and daily calorie &amp; macro tracker built with Flutter and Gemini AI." />
@@ -69,24 +69,27 @@
     :root {
       --bg-void: #070709;
       --bg-surface: #111116;
-      --bg-glass: rgba(20, 20, 27, 0.72);
+      --bg-glass: rgba(20, 20, 27, 0.76);
       --accent: #ff5722;
       --accent-amber: #ff9100;
       --accent-glow: rgba(255, 87, 34, 0.42);
       --text-primary: #f5f5f7;
-      --text-secondary: #9d9da8;
-      --border-glass: rgba(255, 255, 255, 0.08);
-      --border-accent: rgba(255, 87, 34, 0.35);
+      --text-secondary: #a1a1ad;
+      --border-glass: rgba(255, 255, 255, 0.09);
+      --border-accent: rgba(255, 87, 34, 0.38);
     }
 
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      -webkit-tap-highlight-color: transparent;
     }
 
     html {
       scroll-behavior: smooth;
+      width: 100%;
+      overflow-x: hidden;
     }
 
     body {
@@ -94,8 +97,8 @@
       background-color: var(--bg-void);
       color: var(--text-primary);
       line-height: 1.6;
+      width: 100%;
       overflow-x: hidden;
-      cursor: default;
     }
 
     h1, h2, h3, .font-display {
@@ -107,28 +110,35 @@
       text-decoration: none;
     }
 
-    /* Interactive Cursor Spotlight */
+    /* Interactive Cursor Spotlight (Desktop Hover Only) */
     .cursor-spotlight {
       position: fixed;
       top: 0;
       left: 0;
-      width: 520px;
-      height: 520px;
+      width: 480px;
+      height: 480px;
       border-radius: 50%;
       background: radial-gradient(circle, rgba(255, 87, 34, 0.12) 0%, rgba(255, 145, 0, 0.04) 40%, transparent 70%);
       pointer-events: none;
       transform: translate(-50%, -50%);
       z-index: 1;
+      opacity: 0;
       transition: opacity 0.3s ease;
     }
 
-    /* 3D WebGL Background Canvas */
+    @media (hover: hover) and (pointer: fine) {
+      .cursor-spotlight {
+        opacity: 1;
+      }
+    }
+
+    /* 3D WebGL Gym Background Canvas */
     #bg-canvas {
       position: fixed;
       top: 0;
       left: 0;
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
       z-index: 0;
       pointer-events: none;
     }
@@ -136,30 +146,32 @@
     .content-layer {
       position: relative;
       z-index: 2;
+      width: 100%;
     }
 
     .container {
+      width: 100%;
       max-width: 1160px;
       margin: 0 auto;
-      padding: 0 24px;
+      padding: 0 20px;
     }
 
     /* Floating Glass Header */
     header {
       position: sticky;
-      top: 16px;
+      top: 12px;
       z-index: 100;
-      padding: 0 24px;
+      padding: 0 16px;
     }
 
     .nav-shell {
-      max-width: 1112px;
+      max-width: 1128px;
       margin: 0 auto;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 22px;
-      background: rgba(14, 14, 19, 0.78);
+      padding: 10px 18px;
+      background: rgba(14, 14, 19, 0.85);
       border: 1px solid var(--border-glass);
       border-radius: 16px;
       backdrop-filter: blur(18px);
@@ -170,29 +182,31 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 1.35rem;
+      font-size: 1.28rem;
       font-weight: 800;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.4px;
+      flex-shrink: 0;
     }
 
     .brand-badge {
-      width: 38px;
-      height: 38px;
+      width: 36px;
+      height: 36px;
       border-radius: 10px;
       background: linear-gradient(135deg, var(--accent), var(--accent-amber));
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 0 20px var(--accent-glow);
+      box-shadow: 0 0 18px var(--accent-glow);
+      flex-shrink: 0;
     }
 
     .nav-links {
       display: flex;
-      gap: 28px;
+      gap: 24px;
       align-items: center;
-      font-size: 0.92rem;
+      font-size: 0.9rem;
       font-weight: 500;
       color: var(--text-secondary);
     }
@@ -205,13 +219,21 @@
       color: #fff;
     }
 
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
     .nav-cta {
-      padding: 9px 18px;
+      padding: 8px 16px;
       border-radius: 10px;
-      background: rgba(255, 87, 34, 0.14);
+      background: rgba(255, 87, 34, 0.16);
       border: 1px solid var(--border-accent);
       color: #ff9e7d !important;
+      font-size: 0.88rem;
       font-weight: 600;
+      white-space: nowrap;
       transition: all 0.25s ease;
     }
 
@@ -221,12 +243,54 @@
       box-shadow: 0 0 20px var(--accent-glow);
     }
 
+    .mobile-menu-btn {
+      display: none;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-glass);
+      color: #fff;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .mobile-drawer {
+      display: none;
+      max-width: 1128px;
+      margin: 8px auto 0;
+      background: rgba(16, 16, 22, 0.96);
+      border: 1px solid var(--border-accent);
+      border-radius: 16px;
+      padding: 14px 18px;
+      backdrop-filter: blur(20px);
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .mobile-drawer.open {
+      display: flex;
+    }
+
+    .mobile-drawer a {
+      padding: 8px 6px;
+      font-size: 0.96rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .mobile-drawer a:last-child {
+      border-bottom: none;
+    }
+
     /* Hero Section */
     .hero {
-      padding: 96px 0 72px;
+      padding: 84px 0 64px;
       display: grid;
       grid-template-columns: 1.15fr 0.85fr;
-      gap: 48px;
+      gap: 44px;
       align-items: center;
     }
 
@@ -234,14 +298,14 @@
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      padding: 7px 16px;
+      padding: 7px 15px;
       border-radius: 999px;
-      background: rgba(255, 87, 34, 0.1);
+      background: rgba(255, 87, 34, 0.12);
       border: 1px solid var(--border-accent);
       color: #ff9e7d;
-      font-size: 0.84rem;
+      font-size: 0.82rem;
       font-weight: 600;
-      margin-bottom: 24px;
+      margin-bottom: 22px;
     }
 
     .pulse-dot {
@@ -251,6 +315,7 @@
       background: var(--accent);
       box-shadow: 0 0 10px var(--accent);
       animation: pulse 2s infinite;
+      flex-shrink: 0;
     }
 
     @keyframes pulse {
@@ -259,11 +324,11 @@
     }
 
     .hero h1 {
-      font-size: clamp(2.5rem, 5vw, 4.1rem);
+      font-size: clamp(2.15rem, 5vw, 4rem);
       font-weight: 800;
-      line-height: 1.08;
+      line-height: 1.1;
       letter-spacing: -0.02em;
-      margin-bottom: 22px;
+      margin-bottom: 20px;
     }
 
     .hero h1 .gradient-text {
@@ -274,18 +339,18 @@
     }
 
     .hero-sub {
-      font-size: 1.12rem;
+      font-size: clamp(0.98rem, 2vw, 1.12rem);
       color: var(--text-secondary);
       max-width: 560px;
-      margin-bottom: 36px;
+      margin-bottom: 32px;
     }
 
     .cta-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 16px;
+      gap: 14px;
       align-items: center;
-      margin-bottom: 24px;
+      margin-bottom: 22px;
     }
 
     /* Magnetic Primary CTA */
@@ -293,13 +358,14 @@
       position: relative;
       display: inline-flex;
       align-items: center;
-      gap: 12px;
-      padding: 16px 32px;
+      justify-content: center;
+      gap: 10px;
+      padding: 15px 28px;
       border-radius: 14px;
       background: linear-gradient(135deg, #ff5722, #e64a19);
       color: #fff;
       font-weight: 700;
-      font-size: 1.05rem;
+      font-size: 1rem;
       box-shadow: 0 10px 30px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
       transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
       overflow: hidden;
@@ -328,14 +394,15 @@
     .btn-glass {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 10px;
-      padding: 16px 26px;
+      padding: 15px 24px;
       border-radius: 14px;
       background: var(--bg-glass);
       border: 1px solid var(--border-glass);
       backdrop-filter: blur(12px);
       font-weight: 600;
-      font-size: 1rem;
+      font-size: 0.98rem;
       transition: all 0.25s ease;
     }
 
@@ -348,9 +415,9 @@
     .hero-meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 18px;
-      font-size: 0.85rem;
-      color: #7e7e8a;
+      gap: 14px 18px;
+      font-size: 0.84rem;
+      color: #8b8b98;
     }
 
     .hero-meta span {
@@ -364,13 +431,15 @@
       perspective: 1200px;
       display: flex;
       justify-content: center;
+      width: 100%;
     }
 
     .phone-mockup {
-      width: 315px;
+      width: 100%;
+      max-width: 318px;
       background: linear-gradient(165deg, #18181f 0%, #0d0d11 100%);
       border: 1px solid rgba(255, 255, 255, 0.14);
-      border-radius: 36px;
+      border-radius: 34px;
       padding: 18px;
       box-shadow:
         0 30px 70px rgba(0, 0, 0, 0.75),
@@ -381,11 +450,11 @@
     }
 
     .phone-notch {
-      width: 96px;
-      height: 18px;
+      width: 90px;
+      height: 16px;
       background: #070709;
       border-radius: 999px;
-      margin: 0 auto 16px;
+      margin: 0 auto 14px;
     }
 
     .hud-header {
@@ -415,10 +484,6 @@
       border-radius: 18px;
       padding: 14px;
       margin-bottom: 12px;
-    }
-
-    .macro-bar-wrap {
-      margin-top: 8px;
     }
 
     .macro-row {
@@ -459,18 +524,18 @@
 
     .macro-pill strong {
       display: block;
-      font-size: 0.92rem;
+      font-size: 0.9rem;
       color: #fff;
     }
 
     .macro-pill span {
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       color: var(--text-secondary);
     }
 
     .hud-btn-sim {
       width: 100%;
-      padding: 10px;
+      padding: 11px;
       border: none;
       border-radius: 12px;
       background: linear-gradient(135deg, #ff5722, #ff9100);
@@ -487,12 +552,12 @@
 
     /* Section Styling */
     .section {
-      padding: 84px 0;
+      padding: 72px 0;
     }
 
     .section-eyebrow {
       text-align: center;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       text-transform: uppercase;
       letter-spacing: 0.16em;
       color: var(--accent-amber);
@@ -502,8 +567,9 @@
 
     .section-title {
       text-align: center;
-      font-size: clamp(1.9rem, 3.5vw, 2.75rem);
+      font-size: clamp(1.75rem, 3.6vw, 2.7rem);
       font-weight: 800;
+      line-height: 1.18;
       margin-bottom: 14px;
     }
 
@@ -511,14 +577,15 @@
       text-align: center;
       color: var(--text-secondary);
       max-width: 620px;
-      margin: 0 auto 52px;
+      margin: 0 auto 44px;
+      font-size: clamp(0.94rem, 1.8vw, 1.02rem);
     }
 
     /* Interactive Spotlight Bento Cards */
     .bento-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
-      gap: 22px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
     }
 
     .spotlight-card {
@@ -526,7 +593,7 @@
       background: var(--bg-glass);
       border: 1px solid var(--border-glass);
       border-radius: 20px;
-      padding: 30px;
+      padding: 26px;
       overflow: hidden;
       backdrop-filter: blur(14px);
       transition: transform 0.25s ease, border-color 0.25s ease;
@@ -556,25 +623,25 @@
     }
 
     .icon-box {
-      width: 48px;
-      height: 48px;
+      width: 46px;
+      height: 46px;
       border-radius: 14px;
       background: rgba(255, 87, 34, 0.12);
       border: 1px solid var(--border-accent);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.45rem;
-      margin-bottom: 18px;
+      font-size: 1.4rem;
+      margin-bottom: 16px;
     }
 
     .spotlight-card h3 {
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       margin-bottom: 10px;
     }
 
     .spotlight-card p {
-      font-size: 0.94rem;
+      font-size: 0.93rem;
       color: var(--text-secondary);
     }
 
@@ -582,19 +649,19 @@
     .sandbox-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 24px;
+      gap: 22px;
     }
 
     .sandbox-panel {
       background: var(--bg-glass);
       border: 1px solid var(--border-glass);
       border-radius: 22px;
-      padding: 30px;
+      padding: 26px;
       backdrop-filter: blur(16px);
     }
 
     .sandbox-panel h3 {
-      font-size: 1.35rem;
+      font-size: 1.28rem;
       margin-bottom: 8px;
       display: flex;
       align-items: center;
@@ -602,9 +669,9 @@
     }
 
     .sandbox-panel > p {
-      font-size: 0.92rem;
+      font-size: 0.9rem;
       color: var(--text-secondary);
-      margin-bottom: 20px;
+      margin-bottom: 18px;
     }
 
     .meal-chips {
@@ -615,12 +682,12 @@
     }
 
     .chip-btn {
-      padding: 8px 14px;
+      padding: 8px 13px;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.1);
       color: var(--text-primary);
-      font-size: 0.84rem;
+      font-size: 0.82rem;
       cursor: pointer;
       transition: all 0.2s ease;
     }
@@ -635,13 +702,13 @@
       background: rgba(0, 0, 0, 0.42);
       border: 1px solid rgba(255, 255, 255, 0.07);
       border-radius: 16px;
-      padding: 18px;
+      padding: 16px;
     }
 
     .dropset-controls {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
       margin-bottom: 18px;
     }
 
@@ -649,6 +716,7 @@
       flex: 1;
       accent-color: var(--accent);
       cursor: pointer;
+      min-width: 0;
     }
 
     .set-ladder {
@@ -661,20 +729,20 @@
       background: rgba(0, 0, 0, 0.42);
       border: 1px solid rgba(255, 87, 34, 0.25);
       border-radius: 14px;
-      padding: 14px 10px;
+      padding: 14px 8px;
       text-align: center;
     }
 
     .set-step span {
       display: block;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       color: var(--text-secondary);
       margin-bottom: 4px;
     }
 
     .set-step strong {
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 1.25rem;
+      font-size: 1.18rem;
       color: var(--accent-amber);
     }
 
@@ -683,7 +751,7 @@
       background: linear-gradient(145deg, rgba(22, 22, 29, 0.88), rgba(12, 12, 16, 0.92));
       border: 1px solid var(--border-accent);
       border-radius: 24px;
-      padding: 40px;
+      padding: 34px 28px;
       max-width: 860px;
       margin: 0 auto;
       backdrop-filter: blur(14px);
@@ -692,15 +760,16 @@
     .install-steps {
       list-style: none;
       counter-reset: step-counter;
-      margin-top: 24px;
+      margin-top: 22px;
     }
 
     .install-steps li {
       counter-increment: step-counter;
       position: relative;
-      padding-left: 50px;
-      margin-bottom: 20px;
+      padding-left: 46px;
+      margin-bottom: 18px;
       color: var(--text-secondary);
+      font-size: 0.95rem;
     }
 
     .install-steps li::before {
@@ -708,13 +777,13 @@
       position: absolute;
       left: 0;
       top: 0;
-      width: 34px;
-      height: 34px;
+      width: 32px;
+      height: 32px;
       border-radius: 10px;
       background: linear-gradient(135deg, var(--accent), var(--accent-amber));
       color: #fff;
       font-weight: 800;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -724,20 +793,29 @@
       color: #fff;
     }
 
+    code {
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 0.88em;
+      color: #ffb085;
+      word-break: break-word;
+    }
+
     /* FAQ */
     .faq-list {
       max-width: 860px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 12px;
     }
 
     details {
       background: var(--bg-glass);
       border: 1px solid var(--border-glass);
       border-radius: 14px;
-      padding: 20px 24px;
+      padding: 18px 20px;
       transition: border-color 0.2s ease;
     }
 
@@ -749,21 +827,21 @@
       font-weight: 700;
       cursor: pointer;
       color: #fff;
-      font-size: 1.05rem;
+      font-size: 1rem;
     }
 
     details p {
-      margin-top: 12px;
+      margin-top: 10px;
       color: var(--text-secondary);
-      font-size: 0.95rem;
+      font-size: 0.93rem;
     }
 
     /* Corvane-Vault Inspired Architectural Footer */
     .vault-footer {
       position: relative;
-      margin-top: 80px;
-      padding: 84px 0 36px;
-      background: linear-gradient(180deg, rgba(11, 11, 15, 0.6) 0%, #050507 100%);
+      margin-top: 64px;
+      padding: 72px 0 32px;
+      background: linear-gradient(180deg, rgba(11, 11, 15, 0.7) 0%, #050507 100%);
       border-top: 1px solid rgba(255, 255, 255, 0.08);
       overflow: hidden;
     }
@@ -773,7 +851,7 @@
       top: 0;
       left: 50%;
       transform: translateX(-50%);
-      width: 65%;
+      width: 70%;
       height: 1px;
       background: linear-gradient(90deg, transparent, var(--accent), var(--accent-amber), transparent);
       box-shadow: 0 0 24px var(--accent);
@@ -784,51 +862,51 @@
       flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
-      gap: 24px;
-      padding: 36px 40px;
-      border-radius: 24px;
-      background: linear-gradient(135deg, rgba(255, 87, 34, 0.14), rgba(20, 20, 27, 0.9));
+      gap: 20px;
+      padding: 30px 32px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(255, 87, 34, 0.14), rgba(20, 20, 27, 0.92));
       border: 1px solid var(--border-accent);
-      margin-bottom: 64px;
+      margin-bottom: 52px;
     }
 
     .vault-cta-banner h2 {
-      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      font-size: clamp(1.45rem, 3vw, 2.1rem);
       margin-bottom: 6px;
     }
 
     .vault-cta-banner p {
       color: var(--text-secondary);
-      font-size: 0.98rem;
+      font-size: 0.95rem;
     }
 
     .vault-grid {
       display: grid;
       grid-template-columns: 1.6fr 1fr 1fr 1fr;
-      gap: 40px;
-      padding-bottom: 56px;
+      gap: 32px;
+      padding-bottom: 44px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     }
 
     .vault-col h4 {
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       text-transform: uppercase;
       letter-spacing: 0.14em;
       color: #fff;
-      margin-bottom: 18px;
+      margin-bottom: 14px;
     }
 
     .vault-col ul {
       list-style: none;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
 
     .vault-col li a {
       color: var(--text-secondary);
-      font-size: 0.92rem;
+      font-size: 0.9rem;
       transition: color 0.2s ease, transform 0.2s ease;
       display: inline-block;
     }
@@ -840,15 +918,15 @@
 
     .vault-watermark {
       font-family: 'Space Grotesk', sans-serif;
-      font-size: clamp(4.2rem, 15vw, 11.5rem);
+      font-size: clamp(3.6rem, 15vw, 11rem);
       font-weight: 800;
       letter-spacing: -0.04em;
-      line-height: 0.9;
+      line-height: 0.92;
       text-align: center;
       color: transparent;
-      -webkit-text-stroke: 1px rgba(255, 255, 255, 0.07);
+      -webkit-text-stroke: 1px rgba(255, 255, 255, 0.08);
       user-select: none;
-      margin: 28px 0 18px;
+      margin: 24px 0 16px;
     }
 
     .vault-bottom {
@@ -856,16 +934,16 @@
       flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
-      gap: 16px;
-      font-size: 0.86rem;
+      gap: 12px;
+      font-size: 0.84rem;
       color: #6e6e7a;
     }
 
     /* Scroll Reveal */
     .reveal {
       opacity: 0;
-      transform: translateY(24px);
-      transition: opacity 0.7s ease, transform 0.7s ease;
+      transform: translateY(20px);
+      transition: opacity 0.65s ease, transform 0.65s ease;
     }
 
     .reveal.visible {
@@ -873,11 +951,13 @@
       transform: translateY(0);
     }
 
+    /* Tablet & Mobile Responsive Breakpoints */
     @media (max-width: 920px) {
       .hero {
         grid-template-columns: 1fr;
         text-align: center;
-        padding-top: 64px;
+        padding: 56px 0 48px;
+        gap: 36px;
       }
       .hero-sub {
         margin-left: auto;
@@ -892,24 +972,73 @@
       .vault-grid {
         grid-template-columns: 1fr 1fr;
       }
-      .nav-links a:not(.nav-cta) {
+      .nav-links {
         display: none;
+      }
+      .mobile-menu-btn {
+        display: inline-flex;
       }
     }
 
-    @media (max-width: 560px) {
-      .vault-grid {
+    @media (max-width: 600px) {
+      .container {
+        padding: 0 16px;
+      }
+      header {
+        top: 10px;
+        padding: 0 12px;
+      }
+      .nav-shell {
+        padding: 10px 14px;
+      }
+      .nav-cta {
+        padding: 7px 12px;
+        font-size: 0.82rem;
+      }
+      .hero {
+        padding: 42px 0 36px;
+      }
+      .cta-row {
+        flex-direction: column;
+        width: 100%;
+      }
+      .cta-row .btn-magnetic,
+      .cta-row .btn-glass {
+        width: 100%;
+      }
+      .section {
+        padding: 54px 0;
+      }
+      .bento-grid {
         grid-template-columns: 1fr;
       }
+      .spotlight-card,
+      .sandbox-panel {
+        padding: 22px 18px;
+      }
+      .install-shell {
+        padding: 26px 18px;
+      }
+      .vault-grid {
+        grid-template-columns: 1fr;
+        gap: 26px;
+      }
       .vault-cta-banner {
-        padding: 26px;
+        padding: 24px 20px;
+      }
+      .vault-cta-banner .btn-magnetic {
+        width: 100%;
+      }
+      .vault-bottom {
+        justify-content: center;
+        text-align: center;
       }
     }
   </style>
 </head>
 <body>
 
-  <!-- Cursor Spotlight & Three.js WebGL Canvas -->
+  <!-- Cursor Spotlight & Three.js WebGL 3D Gym Scene -->
   <div class="cursor-spotlight" id="cursorSpotlight"></div>
   <canvas id="bg-canvas"></canvas>
 
@@ -925,15 +1054,35 @@
           </span>
           <span>FitOak</span>
         </a>
+
         <nav class="nav-links">
           <a href="#features">Features</a>
           <a href="#sandbox">Interactive Demo</a>
           <a href="#install">Install Guide</a>
           <a href="#faq">FAQ</a>
+        </nav>
+
+        <div class="nav-actions">
           <a href="https://github.com/pandyadhruv014-ui/FitOak/releases/download/Fitoak-v1.1.0/Fitoak.apk" class="nav-cta">
             Download v1.1.0
           </a>
-        </nav>
+          <button type="button" class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <line x1="4" y1="7" x2="20" y2="7"></line>
+              <line x1="4" y1="12" x2="20" y2="12"></line>
+              <line x1="4" y1="17" x2="20" y2="17"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile Dropdown Drawer -->
+      <div class="mobile-drawer" id="mobileDrawer">
+        <a href="#features" class="drawer-link">Features</a>
+        <a href="#sandbox" class="drawer-link">Interactive Demo</a>
+        <a href="#install" class="drawer-link">Install Guide</a>
+        <a href="#faq" class="drawer-link">FAQ</a>
+        <a href="https://github.com/pandyadhruv014-ui/FitOak" target="_blank" rel="noopener" class="drawer-link">GitHub Source</a>
       </div>
     </header>
 
@@ -1020,7 +1169,7 @@
                 <div style="font-size: 0.78rem; color: var(--text-secondary);">Active Squad</div>
                 <div style="font-size: 0.9rem; font-weight: 700;">IRON2026 &bull; 4 Online</div>
               </div>
-              <span style="font-size: 1.2rem;">&#128293;</span>
+              <span style="font-size: 1.2rem;">&#128170;</span>
             </div>
 
             <button type="button" class="hud-btn-sim" id="simulateMealBtn">
@@ -1036,7 +1185,7 @@
           <div class="section-eyebrow">Core Capabilities</div>
           <h2 class="section-title">Everything You Need in One Performance App</h2>
           <p class="section-subtitle">
-            Move your cursor across each module below to inspect how FitOak unifies AI nutrition, strength progression, and real-time social accountability.
+            Explore how FitOak unifies AI nutrition, heavy strength progression, and real-time social accountability across every workout.
           </p>
 
           <div class="bento-grid">
@@ -1104,7 +1253,7 @@
             <!-- AI Nutrition Simulator -->
             <div class="sandbox-panel">
               <h3><span>&#10024;</span> AI Macro Parser Demo</h3>
-              <p>Select a sample meal to see structured macro extraction:</p>
+              <p>Tap a sample meal to inspect structured macro extraction:</p>
 
               <div class="meal-chips" id="mealChips">
                 <button type="button" class="chip-btn active" data-cal="520" data-p="36" data-c="14" data-f="34" data-name="Paneer Tikka (200g)">Paneer Tikka (200g)</button>
@@ -1113,9 +1262,9 @@
               </div>
 
               <div class="sim-result-box">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px;">
                   <strong id="simMealTitle">Paneer Tikka (200g)</strong>
-                  <span style="color: var(--accent-amber); font-weight: 700;" id="simMealCal">520 kcal</span>
+                  <span style="color: var(--accent-amber); font-weight: 700; white-space: nowrap;" id="simMealCal">520 kcal</span>
                 </div>
                 <div class="macro-pills">
                   <div class="macro-pill">
@@ -1140,9 +1289,9 @@
               <p>Slide your working top-set weight to compute consecutive drop sets:</p>
 
               <div class="dropset-controls">
-                <label for="weightSlider" style="font-size: 0.9rem; color: var(--text-secondary);">Top Set:</label>
+                <label for="weightSlider" style="font-size: 0.88rem; color: var(--text-secondary); white-space: nowrap;">Top Set:</label>
                 <input type="range" id="weightSlider" class="weight-slider" min="20" max="200" step="5" value="100" />
-                <strong id="topWeightLabel" style="font-family: 'Space Grotesk', sans-serif; color: #fff; min-width: 58px;">100 kg</strong>
+                <strong id="topWeightLabel" style="font-family: 'Space Grotesk', sans-serif; color: #fff; min-width: 54px; text-align: right;">100 kg</strong>
               </div>
 
               <div class="set-ladder">
@@ -1169,8 +1318,8 @@
         <div class="container">
           <div class="install-shell">
             <div class="section-eyebrow" style="text-align: left;">Quick Setup</div>
-            <h2 style="font-size: 1.85rem; margin-bottom: 8px;">How to Install FitOak v1.1.0 on Android</h2>
-            <p style="color: var(--text-secondary);">Direct installation takes less than 30 seconds.</p>
+            <h2 style="font-size: clamp(1.45rem, 3vw, 1.85rem); margin-bottom: 8px;">How to Install FitOak v1.1.0 on Android</h2>
+            <p style="color: var(--text-secondary); font-size: 0.95rem;">Direct installation takes less than 30 seconds.</p>
 
             <ol class="install-steps">
               <li>
@@ -1245,7 +1394,7 @@
               </span>
               <span>FitOak</span>
             </a>
-            <p style="color: var(--text-secondary); font-size: 0.92rem; max-width: 300px;">
+            <p style="color: var(--text-secondary); font-size: 0.9rem; max-width: 300px;">
               Full-stack AI fitness, strength progression, and Gym Squad collaboration engineered with Flutter, FastAPI, PostgreSQL, and Gemini AI.
             </p>
           </div>
@@ -1289,36 +1438,145 @@
   </div>
 
   <script>
-    // 1. Three.js Interactive Wireframe Torus Knot & Particle Field
-    (function initThreeScene() {
+    // 1. Mobile Navigation Drawer Toggle
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const mobileDrawer = document.getElementById('mobileDrawer');
+    if (mobileMenuBtn && mobileDrawer) {
+      mobileMenuBtn.addEventListener('click', () => {
+        mobileDrawer.classList.toggle('open');
+      });
+      document.querySelectorAll('.drawer-link').forEach((link) => {
+        link.addEventListener('click', () => mobileDrawer.classList.remove('open'));
+      });
+    }
+
+    // 2. Three.js 3D Gym Scene: Sculpted Muscular Flexing Torso & Heavy Olympic Barbell
+    (function initThreeGymScene() {
       const canvas = document.getElementById('bg-canvas');
       if (!canvas || typeof THREE === 'undefined') return;
 
+      const isMobile = window.innerWidth < 768;
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-      camera.position.z = 28;
+      const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = isMobile ? 34 : 26;
 
-      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !isMobile, powerPreference: 'high-performance' });
       renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
 
-      // Wireframe Kinetic Core
-      const knotGeo = new THREE.TorusKnotGeometry(8.5, 2.2, 140, 20);
-      const knotMat = new THREE.MeshBasicMaterial({
+      const wireMatPrimary = new THREE.MeshBasicMaterial({
         color: 0xff5722,
         wireframe: true,
         transparent: true,
-        opacity: 0.12
+        opacity: isMobile ? 0.13 : 0.17
       });
-      const torusKnot = new THREE.Mesh(knotGeo, knotMat);
-      torusKnot.position.set(8, 1, -6);
-      scene.add(torusKnot);
 
-      // Ambient Ember Particles
-      const particleCount = 260;
+      const wireMatAmber = new THREE.MeshBasicMaterial({
+        color: 0xff9100,
+        wireframe: true,
+        transparent: true,
+        opacity: isMobile ? 0.15 : 0.22
+      });
+
+      const gymGroup = new THREE.Group();
+
+      // A. Sculpted Athletic Physique / Flexing Upper Body Wireframe
+      const athleteGroup = new THREE.Group();
+
+      // Head
+      const head = new THREE.Mesh(new THREE.IcosahedronGeometry(1.15, 2), wireMatPrimary);
+      head.position.set(0, 5.1, 0);
+      athleteGroup.add(head);
+
+      // Broad V-Taper Chest & Lats (LatheGeometry sculpted torso)
+      const torsoPoints = [
+        new THREE.Vector2(0.0, -3.2),
+        new THREE.Vector2(1.35, -2.8), // Waist
+        new THREE.Vector2(1.55, -1.2), // Lower abs
+        new THREE.Vector2(2.15, 0.8),  // Mid lats
+        new THREE.Vector2(2.95, 2.6),  // Broad upper chest / lats
+        new THREE.Vector2(2.45, 3.5),  // Traps / Collarbone
+        new THREE.Vector2(0.85, 3.9),  // Neck base
+        new THREE.Vector2(0.0, 3.9)
+      ];
+      const torsoGeo = new THREE.LatheGeometry(torsoPoints, 22);
+      torsoGeo.scale(1.18, 1.0, 0.65);
+      const torso = new THREE.Mesh(torsoGeo, wireMatPrimary);
+      athleteGroup.add(torso);
+
+      // Pectoral Plates
+      [-1, 1].forEach((side) => {
+        const pec = new THREE.Mesh(new THREE.SphereGeometry(1.18, 14, 12), wireMatAmber);
+        pec.scale.set(1.15, 0.78, 0.55);
+        pec.position.set(side * 1.25, 2.25, 1.15);
+        pec.rotation.y = side * 0.22;
+        athleteGroup.add(pec);
+
+        // Deltoids (Shoulders)
+        const delt = new THREE.Mesh(new THREE.SphereGeometry(1.15, 14, 12), wireMatAmber);
+        delt.scale.set(1.05, 1.1, 0.95);
+        delt.position.set(side * 3.35, 2.75, 0);
+        athleteGroup.add(delt);
+
+        // Upper Arm (Bicep / Tricep) - Double Biceps Flex Pose
+        const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.82, 2.7, 12), wireMatPrimary);
+        upperArm.position.set(side * 4.55, 3.15, 0.15);
+        upperArm.rotation.z = side * -1.25;
+        athleteGroup.add(upperArm);
+
+        // Bicep Peak
+        const bicep = new THREE.Mesh(new THREE.SphereGeometry(0.76, 12, 10), wireMatAmber);
+        bicep.scale.set(1.15, 0.85, 0.85);
+        bicep.position.set(side * 4.65, 3.55, 0.2);
+        athleteGroup.add(bicep);
+
+        // Forearm flexed upward
+        const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.64, 2.6, 12), wireMatPrimary);
+        forearm.position.set(side * 5.35, 4.75, 0.35);
+        forearm.rotation.z = side * 0.28;
+        athleteGroup.add(forearm);
+
+        // Fist
+        const fist = new THREE.Mesh(new THREE.DodecahedronGeometry(0.55, 0), wireMatAmber);
+        fist.position.set(side * 4.95, 6.05, 0.45);
+        athleteGroup.add(fist);
+      });
+
+      athleteGroup.position.set(isMobile ? 0 : 7.5, isMobile ? 2.5 : -0.8, -4);
+      athleteGroup.scale.setScalar(isMobile ? 0.85 : 1.05);
+      gymGroup.add(athleteGroup);
+
+      // B. Heavy Olympic Barbell & Weight Plates orbiting behind
+      const barbellGroup = new THREE.Group();
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 15, 12), wireMatAmber);
+      shaft.rotation.z = Math.PI / 2;
+      barbellGroup.add(shaft);
+
+      [-1, 1].forEach((side) => {
+        [
+          { offset: 4.8, radius: 2.35, width: 0.38 },
+          { offset: 5.35, radius: 1.95, width: 0.34 },
+          { offset: 5.85, radius: 1.5, width: 0.3 }
+        ].forEach((plate) => {
+          const pMesh = new THREE.Mesh(new THREE.CylinderGeometry(plate.radius, plate.radius, plate.width, 20), wireMatPrimary);
+          pMesh.rotation.z = Math.PI / 2;
+          pMesh.position.x = side * plate.offset;
+          barbellGroup.add(pMesh);
+        });
+      });
+
+      barbellGroup.position.set(isMobile ? 0 : 7.2, isMobile ? -6.5 : -2.2, -7);
+      barbellGroup.rotation.set(0.35, -0.35, 0.32);
+      barbellGroup.scale.setScalar(isMobile ? 0.72 : 0.92);
+      gymGroup.add(barbellGroup);
+
+      scene.add(gymGroup);
+
+      // Ambient Gym Spark Particles
+      const particleCount = isMobile ? 110 : 220;
       const posArray = new Float32Array(particleCount * 3);
       for (let i = 0; i < particleCount * 3; i++) {
-        posArray[i] = (Math.random() - 0.5) * 65;
+        posArray[i] = (Math.random() - 0.5) * 58;
       }
       const particlesGeo = new THREE.BufferGeometry();
       particlesGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
@@ -1326,7 +1584,7 @@
         size: 0.16,
         color: 0xff9100,
         transparent: true,
-        opacity: 0.55
+        opacity: 0.48
       });
       const particleMesh = new THREE.Points(particlesGeo, particlesMat);
       scene.add(particleMesh);
@@ -1335,52 +1593,62 @@
       window.addEventListener('mousemove', (e) => {
         mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
         mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
-      });
+      }, { passive: true });
 
       window.addEventListener('resize', () => {
+        const mobileNow = window.innerWidth < 768;
         camera.aspect = window.innerWidth / window.innerHeight;
+        camera.position.z = mobileNow ? 34 : 26;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+        athleteGroup.position.x = mobileNow ? 0 : 7.5;
+        barbellGroup.position.x = mobileNow ? 0 : 7.2;
       });
 
+      let clock = 0;
       function animate() {
         requestAnimationFrame(animate);
-        torusKnot.rotation.x += 0.0022;
-        torusKnot.rotation.y += 0.0032;
-        torusKnot.rotation.y += (mouseX * 0.4 - torusKnot.rotation.y) * 0.03;
-        torusKnot.rotation.x += (-mouseY * 0.4 - torusKnot.rotation.x) * 0.03;
+        clock += 0.015;
 
-        particleMesh.rotation.y -= 0.0008;
-        particleMesh.rotation.x += 0.0004;
+        // Subtle breathing & flexing motion
+        athleteGroup.rotation.y = Math.sin(clock * 0.65) * 0.32 + mouseX * 0.25;
+        athleteGroup.rotation.x = -mouseY * 0.15;
+        athleteGroup.position.y = (window.innerWidth < 768 ? 2.5 : -0.8) + Math.sin(clock) * 0.28;
+
+        // Slow heavy barbell rotation
+        barbellGroup.rotation.y += 0.0045;
+        barbellGroup.rotation.z = 0.32 + Math.sin(clock * 0.5) * 0.08;
+
+        particleMesh.rotation.y -= 0.0007;
         renderer.render(scene, camera);
       }
       animate();
     })();
 
-    // 2. Cursor Spotlight & Card Radial Hover Tracking
+    // 3. Cursor Spotlight & Card Radial Hover Tracking (Desktop)
     const spotlight = document.getElementById('cursorSpotlight');
     window.addEventListener('mousemove', (e) => {
       if (spotlight) {
         spotlight.style.left = e.clientX + 'px';
         spotlight.style.top = e.clientY + 'px';
       }
-    });
+    }, { passive: true });
 
     document.querySelectorAll('.spotlight-card').forEach((card) => {
       card.addEventListener('mousemove', (e) => {
         const rect = card.getBoundingClientRect();
         card.style.setProperty('--mouse-x', (e.clientX - rect.left) + 'px');
         card.style.setProperty('--mouse-y', (e.clientY - rect.top) + 'px');
-      });
+      }, { passive: true });
     });
 
-    // 3. Magnetic Primary CTA Button
+    // 4. Magnetic Primary CTA Button (Desktop)
     const magBtn = document.getElementById('magneticCta');
-    if (magBtn) {
+    if (magBtn && window.matchMedia('(hover: hover)').matches) {
       magBtn.addEventListener('mousemove', (e) => {
         const rect = magBtn.getBoundingClientRect();
-        const x = (e.clientX - rect.left - rect.width / 2) * 0.22;
-        const y = (e.clientY - rect.top - rect.height / 2) * 0.22;
+        const x = (e.clientX - rect.left - rect.width / 2) * 0.2;
+        const y = (e.clientY - rect.top - rect.height / 2) * 0.2;
         magBtn.style.transform = `translate(${x}px, ${y}px)`;
       });
       magBtn.addEventListener('mouseleave', () => {
@@ -1388,14 +1656,14 @@
       });
     }
 
-    // 4. 3D Tilt on Phone Mockup + Interactive Meal Log Simulation
+    // 5. 3D Tilt on Phone Mockup + Interactive Meal Log Simulation
     const phone = document.getElementById('phoneMockup');
-    if (phone) {
+    if (phone && window.matchMedia('(hover: hover)').matches) {
       phone.addEventListener('mousemove', (e) => {
         const rect = phone.getBoundingClientRect();
         const x = (e.clientX - rect.left) / rect.width - 0.5;
         const y = (e.clientY - rect.top) / rect.height - 0.5;
-        phone.style.transform = `rotateY(${x * 16}deg) rotateX(${-y * 16}deg)`;
+        phone.style.transform = `rotateY(${x * 14}deg) rotateX(${-y * 14}deg)`;
       });
       phone.addEventListener('mouseleave', () => {
         phone.style.transform = 'rotateY(0deg) rotateX(0deg)';
@@ -1422,7 +1690,7 @@
       });
     }
 
-    // 5. Interactive AI Macro Parser Chips
+    // 6. Interactive AI Macro Parser Chips
     document.querySelectorAll('#mealChips .chip-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('#mealChips .chip-btn').forEach((b) => b.classList.remove('active'));
@@ -1435,7 +1703,7 @@
       });
     });
 
-    // 6. Interactive 20% Drop-Set Calculator Slider
+    // 7. Interactive 20% Drop-Set Calculator Slider
     const weightSlider = document.getElementById('weightSlider');
     if (weightSlider) {
       weightSlider.addEventListener('input', (e) => {
@@ -1447,14 +1715,14 @@
       });
     }
 
-    // 7. Scroll Reveal Observer
+    // 8. Scroll Reveal Observer
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           entry.target.classList.add('visible');
         }
       });
-    }, { threshold: 0.12 });
+    }, { threshold: 0.1 });
 
     document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
   </script>
