@@ -3,6 +3,7 @@ import json
 import re
 import time
 import random
+import asyncio
 import traceback
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -47,6 +48,24 @@ def get_ist_today_str() -> str:
 
 def get_ist_now() -> datetime:
     return datetime.now(IST).replace(tzinfo=None)
+
+def purge_expired_group_messages(conn=None):
+    """Deletes group chat messages older than 7 days."""
+    sql = text("DELETE FROM group_messages WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '7 days'")
+    try:
+        if conn is not None:
+            conn.execute(sql)
+        else:
+            with engine.begin() as new_conn:
+                new_conn.execute(sql)
+    except Exception as e:
+        print(f"⚠️ Group message cleanup error: {e}")
+
+async def periodic_chat_cleanup_task():
+    """Background task to purge expired group messages every 6 hours."""
+    while True:
+        purge_expired_group_messages()
+        await asyncio.sleep(6 * 3600)
 
 # --- Automatic SQL Table & Column Patching ---
 def sync_database_schema():
@@ -180,6 +199,7 @@ def sync_database_schema():
     CREATE INDEX IF NOT EXISTS ix_meals_user_date ON meals (user_id, log_date);
     CREATE INDEX IF NOT EXISTS ix_workouts_user_date ON workouts (user_id, log_date);
     CREATE INDEX IF NOT EXISTS ix_water_user_date ON water_logs (user_id, log_date);
+    CREATE INDEX IF NOT EXISTS ix_group_messages_created_at ON group_messages (created_at);
     """
     try:
         with engine.begin() as conn:
@@ -198,7 +218,10 @@ async def lifespan(app: FastAPI):
         print("✅ SQLAlchemy models initialized")
     except Exception as e:
         print(f"❌ ORM initialization error: {e}")
+
+    cleanup_task = asyncio.create_task(periodic_chat_cleanup_task())
     yield
+    cleanup_task.cancel()
     print("🛑 Shutting down FitOak Backend...")
 
 app = FastAPI(title="FitOak Backend", lifespan=lifespan)
@@ -340,6 +363,10 @@ class GroupJoinRequest(BaseModel):
     user_name: str
     entry_pass: str
 
+class GroupDeleteRequest(BaseModel):
+    user_id: int
+    entry_pass: str
+
 class GroupReminderUpdate(BaseModel):
     user_id: int
     user_name: str
@@ -395,6 +422,18 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "FitOak FastAPI Engine", "ist_date": get_ist_today_str()}
+
+@app.get("/api/app/version")
+def get_app_version():
+    return {
+        "latest_version": os.getenv("APP_LATEST_VERSION", "1.1.0"),
+        "min_supported_version": os.getenv("APP_MIN_VERSION", "1.0.0"),
+        "apk_url": os.getenv(
+            "APP_APK_URL",
+            "https://github.com/pandyadhruv014-ui/FitOak/releases/latest/download/app-release.apk",
+        ),
+        "release_notes": "Squad chats now auto-delete after 7 days, plus passkey-protected group deletion.",
+    }
 
 # --- FCM TOKEN & PUSH NOTIFICATION HELPERS ---
 @app.post("/api/users/fcm-token")
@@ -995,6 +1034,36 @@ def leave_gym_group(group_id: int, user_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success", "message": "Left gym group."}
 
+@app.delete("/api/groups/{group_id}")
+def delete_gym_group(group_id: int, req: GroupDeleteRequest, db: Session = Depends(get_db)):
+    clean_pass = req.entry_pass.strip().upper()
+    if not clean_pass:
+        raise HTTPException(status_code=400, detail="Entry pass is required to delete the group.")
+
+    group_row = db.execute(
+        text("SELECT id, created_by, entry_pass FROM gym_groups WHERE id = :gid"),
+        {"gid": group_id},
+    ).fetchone()
+
+    if not group_row:
+        raise HTTPException(status_code=404, detail="Gym group not found.")
+
+    if group_row.created_by != req.user_id:
+        raise HTTPException(status_code=403, detail="Only the group creator can delete this squad.")
+
+    if group_row.entry_pass.strip().upper() != clean_pass:
+        raise HTTPException(status_code=401, detail="Invalid entry pass. Group deletion cancelled.")
+
+    try:
+        db.execute(text("DELETE FROM group_messages WHERE group_id = :gid"), {"gid": group_id})
+        db.execute(text("DELETE FROM gym_group_members WHERE group_id = :gid"), {"gid": group_id})
+        db.execute(text("DELETE FROM gym_groups WHERE id = :gid"), {"gid": group_id})
+        db.commit()
+        return {"status": "success", "message": "Gym group deleted successfully."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete gym group: {str(e)}")
+
 def _build_group_payload(db: Session, group_id: int) -> dict:
     g = db.execute(
         text("SELECT * FROM gym_groups WHERE id = :gid"),
@@ -1030,11 +1099,15 @@ def get_group_messages(group_id: int, limit: int = 100):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """))
+        # Auto-purge messages older than 7 days
+        purge_expired_group_messages(conn)
+
         rows = conn.execute(
             text("""
                 SELECT id, group_id, user_id, user_name, message, created_at
                 FROM group_messages
                 WHERE group_id = :gid
+                  AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
                 ORDER BY id ASC
                 LIMIT :lim
             """),
@@ -1070,6 +1143,9 @@ def post_group_message(group_id: int, payload: GroupMessageCreate):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """))
+        # Auto-purge messages older than 7 days
+        purge_expired_group_messages(conn)
+
         row = conn.execute(
             text("""
                 INSERT INTO group_messages (group_id, user_id, user_name, message)
@@ -1104,11 +1180,6 @@ def post_group_message(group_id: int, payload: GroupMessageCreate):
             },
         }
 
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
-
 @app.get("/api/debug/fcm/{user_id}")
 def debug_fcm_status(user_id: int):
     with engine.begin() as conn:
@@ -1122,3 +1193,8 @@ def debug_fcm_status(user_id: int):
         "token_preview": f"{row[0][:18]}..." if row else None,
         "updated_at": str(row[1]) if row else None,
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
